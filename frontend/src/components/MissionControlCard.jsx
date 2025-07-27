@@ -1,5 +1,5 @@
-import React from 'react';
-import { Play, Square, Clock, Target, Package, Activity, Battery, Navigation, Gauge } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Play, Square, Clock, Target, Package, Activity, Battery, Navigation, Gauge, Upload, File, Check, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
@@ -9,8 +9,14 @@ const MissionControlCard = ({
   droneData, 
   missionActive, 
   onStartMission, 
-  onAbortMission 
+  onAbortMission,
+  kmlFile,
+  onKMLUpload 
 }) => {
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('idle');
+  const fileInputRef = useRef(null);
+
   const formatElapsedTime = (seconds) => {
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
@@ -18,11 +24,130 @@ const MissionControlCard = ({
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileInput = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
+  const handleFile = (file) => {
+    if (file.name.toLowerCase().endsWith('.kml')) {
+      setUploadStatus('uploading');
+      
+      setTimeout(() => {
+        setUploadStatus('success');
+        onKMLUpload(file);
+      }, 1500);
+    } else {
+      setUploadStatus('error');
+      setTimeout(() => setUploadStatus('idle'), 3000);
+    }
+  };
+
+  const openFileDialog = () => {
+    fileInputRef.current?.click();
+  };
+
+  const removeFile = () => {
+    onKMLUpload(null);
+    setUploadStatus('idle');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="bg-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-4 h-full">
       <h3 className="text-lg font-semibold mb-4 text-blue-400">Mission Control</h3>
       
       <div className="space-y-4">
+        {/* KML Upload Section */}
+        <div className="bg-gray-800/50 rounded-lg p-3">
+          <h4 className="text-sm font-semibold text-blue-400 mb-2">Mission Area (KML)</h4>
+          <div
+            className={`
+              relative border border-dashed rounded-lg p-3 text-center cursor-pointer
+              transition-all duration-300 h-16
+              ${dragActive 
+                ? 'border-blue-500 bg-blue-500/10' 
+                : uploadStatus === 'success' 
+                  ? 'border-green-500 bg-green-500/10'
+                  : uploadStatus === 'error'
+                    ? 'border-red-500 bg-red-500/10'
+                    : 'border-gray-600 hover:border-gray-500 hover:bg-gray-800/50'
+              }
+            `}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            onClick={openFileDialog}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".kml"
+              onChange={handleFileInput}
+              className="hidden"
+            />
+            
+            <div className="flex items-center justify-center h-full">
+              {uploadStatus === 'uploading' ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                  <span className="text-xs text-blue-400">Uploading...</span>
+                </div>
+              ) : uploadStatus === 'success' ? (
+                <div className="flex items-center">
+                  <Check className="w-4 h-4 text-green-500 mr-2" />
+                  <span className="text-xs text-green-400 truncate max-w-[120px]">
+                    {kmlFile?.name}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile();
+                    }}
+                    className="ml-2 text-red-400 hover:text-red-300"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : uploadStatus === 'error' ? (
+                <div className="flex items-center">
+                  <X className="w-4 h-4 text-red-500 mr-2" />
+                  <span className="text-xs text-red-400">Invalid file</span>
+                </div>
+              ) : (
+                <div className="flex items-center">
+                  <Upload className="w-4 h-4 text-gray-400 mr-2" />
+                  <span className="text-xs text-gray-300">Drop KML or browse</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Mission Info */}
         <div className="bg-gray-800/50 rounded-lg p-3">
           <div className="flex items-center justify-between mb-2">
@@ -108,9 +233,9 @@ const MissionControlCard = ({
           </Button>
         </div>
 
-        {/* Drone Statistics */}
+        {/* Quick Stats Summary */}
         <div className="bg-gray-800/50 rounded-lg p-3">
-          <h4 className="text-sm font-semibold text-blue-400 mb-3">Drone Telemetry</h4>
+          <h4 className="text-sm font-semibold text-blue-400 mb-3">Mission Summary</h4>
           
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div className="flex items-center justify-between">
@@ -145,27 +270,6 @@ const MissionControlCard = ({
                 ETA
               </span>
               <span className="text-cyan-300 font-semibold">{droneData.eta} min</span>
-            </div>
-          </div>
-
-          {/* Individual Drone Status */}
-          <div className="mt-3 pt-3 border-t border-gray-700 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-green-400">Scout Drone</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-white">{droneData.scout.battery}%</span>
-                <span className="text-gray-400">{droneData.scout.altitude}m</span>
-                <div className={`w-2 h-2 rounded-full ${droneData.scout.connected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
-              </div>
-            </div>
-            
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-orange-400">Delivery Drone</span>
-              <div className="flex items-center space-x-2">
-                <span className="text-white">{droneData.delivery.battery}%</span>
-                <span className="text-gray-400">{droneData.delivery.altitude}m</span>
-                <div className={`w-2 h-2 rounded-full ${droneData.delivery.connected ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
-              </div>
             </div>
           </div>
         </div>
