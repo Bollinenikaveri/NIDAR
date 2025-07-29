@@ -17,7 +17,7 @@ const Header = () => {
         <div className="flex items-center space-x-8">
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-              NIDAR Mission Control
+             Yantramanav Mission Control 
             </h1>
             <p className="text-gray-400 text-sm font-medium">Search and Rescue Operations</p>
           </div>

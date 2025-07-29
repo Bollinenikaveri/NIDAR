@@ -31,15 +31,20 @@ const MissionControlDashboard = () => {
   }, []);
 
   const handleStartMission = () => {
-    setMissionActive(true);
-    // Add mission started alert
-    setAlerts(prev => [mockDataService.generateAlert('Mission Started', 'HIGH'), ...prev.slice(0, 4)]);
+    if (kmlFile) {
+      setMissionActive(true);
+      setAlerts(prev => [mockDataService.generateAlert('Mission Started', 'HIGH'), ...prev.slice(0, 4)]);
+    }
   };
 
   const handleAbortMission = () => {
-    setMissionActive(false);
-    // Add mission aborted alert
-    setAlerts(prev => [mockDataService.generateAlert('Mission Aborted', 'HIGH'), ...prev.slice(0, 4)]);
+    if(kmlFile){
+      setMissionActive(false);
+      setKmlFile(null);
+      setAlerts(prev => [mockDataService.generateAlert('Mission Aborted', 'HIGH'), ...prev.slice(0, 4)]);
+    }
+  
+    
   };
 
   const handleClearAlerts = () => {
@@ -52,6 +57,7 @@ const MissionControlDashboard = () => {
 
   const handleKMLUpload = (file) => {
     setKmlFile(file);
+    mockDataService.getKMLData(file)
   };
 
   return (

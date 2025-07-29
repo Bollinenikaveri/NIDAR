@@ -1,5 +1,69 @@
+import ROSLIB, { Ros} from "roslib";
+
+
+
 class MockDataService {
   constructor() {
+    this.url = process.env.ROS_PATH || 'ws://localhost:9090'; // Default to localhost if not set
+        // Initialize ROS connection
+    this.ros = new Ros({
+      url: this.url
+    });
+    this.ros.on('connection', () => {
+      console.log('Connected to ROS');
+    });
+    this.ros.on('error', (error) => {
+      console.error('Error connecting to ROS:', error);
+    });
+    this.ros.on('close', () => {
+      console.log('Connection to ROS closed');
+    });
+
+
+    // Intialize Base Station and Drone Locations
+    this.baseStationLocation = new ROSLIB.Service({
+      ros: this.ros,
+      name: '/base_station/location',
+      serviceType: 'geographic_msgs/GeoPoint'
+    }).callService();
+
+    // Initialize Scout and Delivery Drone Home Locations
+    this.scoutHomeLocation = new ROSLIB.Service({
+      ros: this.ros,
+      name: '/scout/home_location',
+      serviceType: 'geographic_msgs/GeoPoint'
+    }).callService();
+
+    this.deliveryHomeLocation = new ROSLIB.Service({
+      ros: this.ros,
+      name: '/delivery/home_location',  
+      serviceType: 'geographic_msgs/GeoPoint'
+    }).callService();
+
+    // Initialize Victim and Current Drone Locations
+    this.victimLocation = new ROSLIB.Service({
+      ros: this.ros,  
+      name: '/victim/location',
+      serviceType: 'geographic_msgs/GeoPoint'
+    }).callService();
+
+    this.currentScoutDroneLocation = new ROSLIB.Service({
+      ros: this.ros,
+      name: '/current_drone/location',
+      serviceType: 'geographic_msgs/GeoPoint'
+    }).callService();
+
+    this.currentDeliveryDroneLocation = new ROSLIB.Service({
+      ros: this.ros,
+      name: '/current_delivery_drone/location',
+      serviceType: 'geographic_msgs/GeoPoint'
+    }).callService();
+    
+    this.baseLocation = { lat: 37.7749, lng: -122.4194 }; // San Francisco
+    this.victimLocation = { lat: 37.7849, lng: -122.4094 };
+    this.currentDroneLocation = { lat: 37.7749, lng: -122.4194 };
+
+  
     this.baseLocation = { lat: 37.7749, lng: -122.4194 }; // San Francisco
     this.victimLocation = { lat: 37.7849, lng: -122.4094 };
     this.currentDroneLocation = { lat: 37.7749, lng: -122.4194 };

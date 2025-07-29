@@ -3,6 +3,7 @@ import { Play, Square, Clock, Target, Package, Activity, Battery, Navigation, Ga
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
+import kmlParser from 'js-kml-parser';
 
 const MissionControlCard = ({ 
   missionData, 
@@ -52,6 +53,7 @@ const MissionControlCard = ({
 
   const handleFile = (file) => {
     if (file.name.toLowerCase().endsWith('.kml')) {
+      console.log('Handling file:', file);
       setUploadStatus('uploading');
       
       setTimeout(() => {
@@ -102,6 +104,7 @@ const MissionControlCard = ({
             onDragOver={handleDrag}
             onDrop={handleDrop}
             onClick={openFileDialog}
+            
           >
             <input
               ref={fileInputRef}
@@ -110,7 +113,7 @@ const MissionControlCard = ({
               onChange={handleFileInput}
               className="hidden"
             />
-            
+
             <div className="flex items-center justify-center h-full">
               {uploadStatus === 'uploading' ? (
                 <div className="flex items-center">
@@ -125,9 +128,11 @@ const MissionControlCard = ({
                   </span>
                   <button
                     onClick={(e) => {
+                      
                       e.stopPropagation();
                       removeFile();
                     }}
+                    disabled={missionActive}
                     className="ml-2 text-red-400 hover:text-red-300"
                   >
                     <X className="w-3 h-3" />
@@ -198,10 +203,11 @@ const MissionControlCard = ({
         </div>
 
         {/* Mission Controls */}
-        <div className="flex space-x-2">
+        { kmlFile  && (
+          <div className="flex space-x-2"  >
           <Button 
             onClick={onStartMission}
-            disabled={missionActive}
+            disabled={missionActive && kmlFile}
             className={`
               flex-1 transition-all duration-300
               ${missionActive 
@@ -217,7 +223,7 @@ const MissionControlCard = ({
           
           <Button 
             onClick={onAbortMission}
-            disabled={!missionActive}
+            disabled={!missionActive }
             variant="destructive"
             className={`
               flex-1 transition-all duration-300
@@ -232,6 +238,7 @@ const MissionControlCard = ({
             Abort Mission
           </Button>
         </div>
+        )}
 
         {/* Quick Stats Summary */}
         <div className="bg-gray-800/50 rounded-lg p-3">
