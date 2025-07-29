@@ -3,7 +3,7 @@ import { Play, Square, Clock, Target, Package, Activity, Battery, Navigation, Ga
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
-import kmlParser from 'js-kml-parser';
+
 
 const MissionControlCard = ({ 
   missionData, 
