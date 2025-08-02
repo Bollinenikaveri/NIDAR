@@ -4,7 +4,7 @@ import ROSLIB, { Ros} from "roslib";
 
 class MockDataService {
   constructor() {
-    this.url = process.env.ROS_PATH || 'ws://localhost:9090'; // Default to localhost if not set
+    this.url = process.env.ROS_PATH || 'ws://10.63.22.73:9090'; // Default to localhost if not set
         // Initialize ROS connection
     this.ros = new Ros({
       url: this.url

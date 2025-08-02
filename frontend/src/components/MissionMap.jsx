@@ -1,20 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MapPin, Navigation, Target, Home } from 'lucide-react';
+import { MapPin, Navigation, Target, Home, Flag, Route } from 'lucide-react';
 
 // Simple map component (we'll replace with Leaflet later)
-const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
+const MissionMap = ({ droneData, missionActive, isMainMap = false, kmlData }) => {
   const [pathPoints, setPathPoints] = useState([]);
   const mapRef = useRef(null);
 
-  useEffect(() => {
-    if (missionActive && droneData) {
-      // Simulate A* pathfinding
-      const path = calculateAStarPath(droneData.scout.location, droneData.victim);
-      setPathPoints(path);
-    }
-  }, [missionActive, droneData]);
+  const getRelativePosition = (location, baseLocation) => {
+    if (!location || !baseLocation) return { x: 50, y: 50 };
+    
+    // Use a much larger scaling factor to make the positions more visible
+    const scale = 100000; // Increased from 10000 to 100000
+    const deltaLng = (location.lng - baseLocation.lng) * scale;
+    const deltaLat = (location.lat - baseLocation.lat) * scale;
+    
+    return {
+      x: Math.max(5, Math.min(95, 50 + deltaLng)), // Constrain to 5-95% to keep within bounds
+      y: Math.max(5, Math.min(95, 50 + deltaLat))
+    };
+  };
 
-  const calculateAStarPath = (start, end) => {
+  const calculateAStarPath = (start, end, baseLocation) => {
     const path = [];
     const steps = 8;
     
@@ -25,22 +31,25 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
       
       // Add some realistic curve
       const offset = Math.sin(progress * Math.PI) * 0.002;
-      path.push({
-        x: 50 + (lng - start.lng) * 10000,
-        y: 50 + (lat - start.lat) * 10000 + offset * 1000
-      });
+      const pathPoint = {
+        lat: lat + offset,
+        lng: lng + offset
+      };
+      
+      // Use the same coordinate system as other elements
+      const pos = getRelativePosition(pathPoint, baseLocation);
+      path.push(pos);
     }
     return path;
   };
 
-  const getRelativePosition = (location, baseLocation) => {
-    if (!location || !baseLocation) return { x: 50, y: 50 };
-    
-    return {
-      x: 50 + (location.lng - baseLocation.lng) * 10000,
-      y: 50 + (location.lat - baseLocation.lat) * 10000
-    };
-  };
+  useEffect(() => {
+    if (missionActive && droneData) {
+      // Simulate A* pathfinding
+      const path = calculateAStarPath(droneData.scout.location, droneData.victim, droneData.base);
+      setPathPoints(path);
+    }
+  }, [missionActive, droneData]);
 
   if (!droneData) return null;
 
@@ -91,6 +100,65 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
             />
           </svg>
         )}
+
+        {/* KML Waypoints */}
+        {kmlData && kmlData.waypoints && kmlData.waypoints.map((waypoint, index) => {
+          const waypointPos = getRelativePosition(waypoint, droneData.base);
+          return (
+            <div 
+              key={`waypoint-${index}`}
+              className="absolute transform -translate-x-1/2 -translate-y-1/2 z-15"
+              style={{ left: `${waypointPos.x}%`, top: `${waypointPos.y}%` }}
+            >
+              <div className="relative">
+                <Flag className="w-5 h-5 text-cyan-400" />
+                <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-xs text-cyan-400 whitespace-nowrap">
+                  {waypoint.name}
+                </div>
+                <div className="absolute inset-0 bg-cyan-400/30 rounded-full animate-ping scale-150"></div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* KML Areas */}
+        {kmlData && kmlData.coordinates && kmlData.coordinates.map((item, index) => {
+          if (item.type === 'area' && item.area) {
+            const areaPoints = item.area.map(point => getRelativePosition(point, droneData.base));
+            const pathString = areaPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z';
+            
+            return (
+              <svg key={`area-${index}`} className="absolute inset-0 w-full h-full pointer-events-none">
+                <path
+                  d={pathString}
+                  stroke="#06b6d4"
+                  strokeWidth="3"
+                  fill="rgba(6, 182, 212, 0.2)"
+                  strokeDasharray="5,5"
+                />
+              </svg>
+            );
+          }
+
+          if (item.type === 'route' && item.path) {
+            const routePoints = item.path.map(point => getRelativePosition(point, droneData.base));
+            const pathString = routePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+            
+            return (
+              <svg key={`route-${index}`} className="absolute inset-0 w-full h-full pointer-events-none">
+                <path
+                  d={pathString}
+                  stroke="#06b6d4"
+                  strokeWidth="4"
+                  fill="none"
+                  strokeDasharray="8,8"
+                />
+              </svg>
+            );
+          }
+
+          return null;
+        })}
 
         {/* Base Station */}
         <div 
@@ -169,6 +237,20 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
             <div className="text-green-400">Scout: {droneData.scout.location.lat.toFixed(6)}, {droneData.scout.location.lng.toFixed(6)}</div>
             <div className="text-orange-400">Delivery: {droneData.delivery.location.lat.toFixed(6)}, {droneData.delivery.location.lng.toFixed(6)}</div>
             <div className="text-red-400">Victim: {droneData.victim.lat.toFixed(6)}, {droneData.victim.lng.toFixed(6)}</div>
+            
+            {kmlData && kmlData.waypoints && kmlData.waypoints.length > 0 && (
+              <>
+                <div className="text-gray-400 mt-2 mb-1">KML Waypoints</div>
+                {kmlData.waypoints.slice(0, 3).map((waypoint, index) => (
+                  <div key={index} className="text-cyan-400">
+                    {waypoint.name}: {waypoint.lat.toFixed(6)}, {waypoint.lng.toFixed(6)}
+                  </div>
+                ))}
+                {kmlData.waypoints.length > 3 && (
+                  <div className="text-gray-400">... and {kmlData.waypoints.length - 3} more</div>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -178,6 +260,21 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
             <div className="flex items-center text-green-400">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2"></div>
               <span className="text-sm font-semibold">A* PATH ACTIVE</span>
+            </div>
+          </div>
+        )}
+
+        {/* KML Status */}
+        {isMainMap && kmlData && (
+          <div className="absolute top-4 right-4 bg-cyan-900/90 backdrop-blur-sm rounded-lg p-3">
+            <div className="flex items-center text-cyan-400">
+              <Route className="w-4 h-4 mr-2" />
+              <div>
+                <div className="text-sm font-semibold">{kmlData.fileName}</div>
+                <div className="text-xs text-cyan-300">
+                  {kmlData.waypoints?.length || 0} waypoints • {kmlData.coordinates?.length || 0} features
+                </div>
+              </div>
             </div>
           </div>
         )}

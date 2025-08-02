@@ -14,8 +14,22 @@ const MissionControlDashboard = () => {
   const [selectedFeed, setSelectedFeed] = useState('scout');
   const [missionActive, setMissionActive] = useState(false);
   const [kmlFile, setKmlFile] = useState(null);
+  const [kmlData, setKmlData] = useState(null);
 
   useEffect(() => {
+    // Load sample KML data on component mount to demonstrate functionality
+    const loadSampleKML = async () => {
+      try {
+        const sampleKML = await mockDataService.getKMLData(null);
+        setKmlData(sampleKML);
+        console.log('Sample KML data loaded:', sampleKML);
+      } catch (error) {
+        console.error('Error loading sample KML:', error);
+      }
+    };
+    
+    loadSampleKML();
+
     // Simulate real-time updates
     const interval = setInterval(() => {
       setDroneData(mockDataService.getDroneData());
@@ -41,10 +55,9 @@ const MissionControlDashboard = () => {
     if(kmlFile){
       setMissionActive(false);
       setKmlFile(null);
+      setKmlData(null);
       setAlerts(prev => [mockDataService.generateAlert('Mission Aborted', 'HIGH'), ...prev.slice(0, 4)]);
     }
-  
-    
   };
 
   const handleClearAlerts = () => {
@@ -55,9 +68,21 @@ const MissionControlDashboard = () => {
     setAlerts(prev => prev.map(alert => ({ ...alert, read: true })));
   };
 
-  const handleKMLUpload = (file) => {
+  const handleKMLUpload = async (file) => {
     setKmlFile(file);
-    mockDataService.getKMLData(file)
+    if (file) {
+      try {
+        const parsedKML = await mockDataService.getKMLData(file);
+        setKmlData(parsedKML);
+        setAlerts(prev => [mockDataService.generateAlert('KML File Loaded Successfully', 'MEDIUM'), ...prev.slice(0, 4)]);
+        console.log('Parsed KML data:', parsedKML);
+      } catch (error) {
+        console.error('Error parsing KML file:', error);
+        setAlerts(prev => [mockDataService.generateAlert('KML File Parse Error', 'HIGH'), ...prev.slice(0, 4)]);
+      }
+    } else {
+      setKmlData(null);
+    }
   };
 
   return (
@@ -97,6 +122,7 @@ const MissionControlDashboard = () => {
                   droneData={droneData}
                   missionActive={missionActive}
                   isMainMap={true}
+                  kmlData={kmlData}
                 />
               </div>
             </div>
