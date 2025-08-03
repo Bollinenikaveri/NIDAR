@@ -44,7 +44,7 @@ const Header = () => {
           <div className="text-2xl font-bold font-mono text-cyan-300">
             {currentTime.toLocaleTimeString('en-US', { 
               hour12: false,
-              timeZoneName: 'short'
+              //timeZoneName: 'short'
             })}
           </div>
           <div className="text-gray-400 text-sm">

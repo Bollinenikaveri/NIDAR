@@ -1,3 +1,3 @@
-# NIDAR UI Interface 
+# NIDAR UI
 
 
