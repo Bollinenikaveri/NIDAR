@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Lock, Wifi, Settings, X, ArrowLeft, Radio, Clock, RotateCcw, Power, Settings as SettingsIcon } from 'lucide-react';
 import { Button } from './ui/button';
+import { toast } from 'sonner';
 
 const Header = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState('ros');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [rosSettings, setRosSettings] = useState({
     host: 'localhost',
     port: '9090',
@@ -54,21 +56,113 @@ const Header = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // Load saved settings from localStorage on component mount
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('nidarSettings');
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed.rosSettings) {
+          setRosSettings(parsed.rosSettings);
+        }
+        if (parsed.timeSettings) {
+          setTimeSettings(parsed.timeSettings);
+        }
+      } catch (error) {
+        console.error('Error loading saved settings:', error);
+      }
+    }
+  }, []);
+
+  // Track changes to mark as unsaved
+  const handleSettingsChange = (newSettings, settingsType) => {
+    if (settingsType === 'ros') {
+      setRosSettings(newSettings);
+    } else if (settingsType === 'time') {
+      setTimeSettings(newSettings);
+    }
+    setHasUnsavedChanges(true);
+  };
+
+  // Save settings to localStorage
+  const handleSaveSettings = () => {
+    try {
+      const settingsToSave = {
+        rosSettings,
+        timeSettings,
+        savedAt: new Date().toISOString()
+      };
+      localStorage.setItem('nidarSettings', JSON.stringify(settingsToSave));
+      setHasUnsavedChanges(false);
+      toast.success('Settings saved successfully!');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('Failed to save settings. Please try again.');
+    }
+  };
+
   const handleRosConnect = () => {
-    setRosSettings(prev => ({ ...prev, connected: !prev.connected }));
+    const newSettings = { ...rosSettings, connected: !rosSettings.connected };
+    handleSettingsChange(newSettings, 'ros');
   };
 
   const handleDroneConnect = (droneId) => {
-    setRosSettings(prev => ({
-      ...prev,
+    const newSettings = {
+      ...rosSettings,
       drones: prev.drones.map(drone =>
         drone.id === droneId ? { ...drone, connected: !drone.connected } : drone
       )
-    }));
+    };
+    handleSettingsChange(newSettings, 'ros');
   };
 
   const handleTopicToggle = (topicName, droneId = null) => {
-    setRosSettings(prev => {
+    let newSettings;
+    if (droneId) {
+      newSettings = {
+        ...rosSettings,
+        drones: rosSettings.drones.map(drone =>
+          drone.id === droneId ? {
+            ...drone,
+            topics: drone.topics.map(topic =>
+              topic.name === topicName ? { ...topic, enabled: !topic.enabled } : topic
+            )
+          } : drone
+        )
+      };
+    } else {
+      newSettings = {
+        ...rosSettings,
+        globalTopics: rosSettings.globalTopics.map(topic =>
+          topic.name === topicName ? { ...topic, enabled: !topic.enabled } : topic
+        )
+      };
+    }
+    handleSettingsChange(newSettings, 'ros');
+  };
+
+  const handleResetStats = () => {
+    const newTimeSettings = {
+      maxFlightTime: 30,
+      currentFlightTime: 0,
+      isActive: false
+    };
+    handleSettingsChange(newTimeSettings, 'time');
+    toast.success('Statistics have been reset to default values');
+  };
+
+  // Handle input changes for ROS settings
+  const handleRosInputChange = (field, value) => {
+    const newSettings = { ...rosSettings, [field]: value };
+    handleSettingsChange(newSettings, 'ros');
+  };
+
+  // Handle input changes for time settings
+  const handleTimeInputChange = (field, value) => {
+    const newSettings = { ...timeSettings, [field]: value };
+    handleSettingsChange(newSettings, 'time');
+  };
+
       if (droneId) {
         return {
           ...prev,
@@ -92,15 +186,6 @@ const Header = () => {
     });
   };
 
-  const handleResetStats = () => {
-    setTimeSettings({
-      maxFlightTime: 30,
-      currentFlightTime: 0,
-      isActive: false
-    });
-    alert('Statistics have been reset to default values');
-  };
-
   const renderSettingsContent = () => {
     switch (activeTab) {
       case 'ros':
@@ -118,7 +203,7 @@ const Header = () => {
                     <input
                       type="text"
                       value={rosSettings.host}
-                      onChange={(e) => setRosSettings(prev => ({ ...prev, host: e.target.value }))}
+                      onChange={(e) => handleRosInputChange('host', e.target.value)}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
                       placeholder="localhost"
                     />
@@ -128,7 +213,7 @@ const Header = () => {
                     <input
                       type="text"
                       value={rosSettings.port}
-                      onChange={(e) => setRosSettings(prev => ({ ...prev, port: e.target.value }))}
+                      onChange={(e) => handleRosInputChange('port', e.target.value)}
                       className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
                       placeholder="9090"
                     />
@@ -245,7 +330,7 @@ const Header = () => {
                   <input
                     type="number"
                     value={timeSettings.maxFlightTime}
-                    onChange={(e) => setTimeSettings(prev => ({ ...prev, maxFlightTime: parseInt(e.target.value) || 30 }))}
+                    onChange={(e) => handleTimeInputChange('maxFlightTime', parseInt(e.target.value) || 30)}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
                     min="1"
                     max="120"
@@ -268,14 +353,14 @@ const Header = () => {
 
                 <div className="flex space-x-2">
                   <Button
-                    onClick={() => setTimeSettings(prev => ({ ...prev, isActive: !prev.isActive }))}
+                    onClick={() => handleTimeInputChange('isActive', !timeSettings.isActive)}
                     className={timeSettings.isActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}
                   >
                     {timeSettings.isActive ? 'Stop Timer' : 'Start Timer'}
                   </Button>
                   
                   <Button
-                    onClick={() => setTimeSettings(prev => ({ ...prev, currentFlightTime: 0 }))}
+                    onClick={() => handleTimeInputChange('currentFlightTime', 0)}
                     variant="outline"
                   >
                     Reset Timer
@@ -482,6 +567,27 @@ const Header = () => {
           {/* Settings Content */}
           <div className="flex-1 p-6 overflow-y-auto">
             {renderSettingsContent()}
+            
+            {/* Save Button */}
+            <div className="sticky bottom-0 bg-gray-900 pt-4 mt-6 border-t border-gray-700">
+              <Button
+                onClick={handleSaveSettings}
+                className={`w-full transition-all duration-300 ${
+                  hasUnsavedChanges 
+                    ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+                disabled={!hasUnsavedChanges}
+              >
+                {hasUnsavedChanges ? 'Save Changes' : 'All Changes Saved'}
+              </Button>
+              
+              {hasUnsavedChanges && (
+                <p className="text-xs text-yellow-400 mt-2 text-center">
+                  You have unsaved changes
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
