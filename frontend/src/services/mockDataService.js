@@ -49,7 +49,7 @@ class MockDataService {
 
     this.currentScoutDroneLocation = new ROSLIB.Service({
       ros: this.ros,
-      name: '/current_drone/location',
+      name: '/scout/location',
       serviceType: 'geographic_msgs/GeoPoint'
     }).callService();
 
