@@ -109,7 +109,7 @@ const Header = () => {
   const handleDroneConnect = (droneId) => {
     const newSettings = {
       ...rosSettings,
-      drones: prev.drones.map(drone =>
+      drones: rosSettings.drones.map(drone =>
         drone.id === droneId ? { ...drone, connected: !drone.connected } : drone
       )
     };
@@ -161,29 +161,6 @@ const Header = () => {
   const handleTimeInputChange = (field, value) => {
     const newSettings = { ...timeSettings, [field]: value };
     handleSettingsChange(newSettings, 'time');
-  };
-
-      if (droneId) {
-        return {
-          ...prev,
-          drones: prev.drones.map(drone =>
-            drone.id === droneId ? {
-              ...drone,
-              topics: drone.topics.map(topic =>
-                topic.name === topicName ? { ...topic, enabled: !topic.enabled } : topic
-              )
-            } : drone
-          )
-        };
-      } else {
-        return {
-          ...prev,
-          globalTopics: prev.globalTopics.map(topic =>
-            topic.name === topicName ? { ...topic, enabled: !topic.enabled } : topic
-          )
-        };
-      }
-    });
   };
 
   const renderSettingsContent = () => {
