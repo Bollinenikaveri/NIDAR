@@ -4670,6 +4670,14 @@ dot-case@^3.0.4:
     no-case "^3.0.4"
     tslib "^2.0.3"
 
+dotenv-cra@^3.0.3:
+  version "3.0.3"
+  resolved "https://registry.npmjs.org/dotenv-cra/-/dotenv-cra-3.0.3.tgz"
+  integrity sha512-p/EaxmpLem27Oy/z776GdYnWcHuwWJAzq1XJZvjhqqPPKAoFSn8/PuLradZIiGbX8P2Z5GY7PtswvLH1BYJibQ==
+  dependencies:
+    dotenv "^10.0.0"
+    dotenv-expand "^5.1.0"
+
 dotenv-expand@^5.1.0:
   version "5.1.0"
   resolved "https://registry.npmjs.org/dotenv-expand/-/dotenv-expand-5.1.0.tgz"
