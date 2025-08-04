@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Shield, Lock, Wifi, Settings, X, ArrowLeft, Radio, Clock, RotateCcw, Power, Settings as SettingsIcon } from 'lucide-react';
 import { Button } from './ui/button';
