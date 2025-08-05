@@ -7,7 +7,13 @@ const Header = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState('ros');
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [unsavedChanges, setUnsavedChanges] = useState({
+    ros: false,
+    time: false,
+    reset: false,
+    power: false,
+    general: false
+  });
   const [rosSettings, setRosSettings] = useState({
     host: 'localhost',
     port: '9090',
@@ -74,17 +80,17 @@ const Header = () => {
   }, []);
 
   // Track changes to mark as unsaved
-  const handleSettingsChange = (newSettings, settingsType) => {
+  const handleSettingsChange = (newSettings, settingsType, tabName) => {
     if (settingsType === 'ros') {
       setRosSettings(newSettings);
     } else if (settingsType === 'time') {
       setTimeSettings(newSettings);
     }
-    setHasUnsavedChanges(true);
+    setUnsavedChanges(prev => ({ ...prev, [tabName]: true }));
   };
 
   // Save settings to localStorage
-  const handleSaveSettings = () => {
+  const handleSaveSettings = (tabName) => {
     try {
       const settingsToSave = {
         rosSettings,
@@ -92,8 +98,8 @@ const Header = () => {
         savedAt: new Date().toISOString()
       };
       localStorage.setItem('nidarSettings', JSON.stringify(settingsToSave));
-      setHasUnsavedChanges(false);
-      toast.success('Settings saved successfully!');
+      setUnsavedChanges(prev => ({ ...prev, [tabName]: false }));
+      toast.success(`${tabName.charAt(0).toUpperCase() + tabName.slice(1)} settings saved successfully!`);
     } catch (error) {
       console.error('Error saving settings:', error);
       toast.error('Failed to save settings. Please try again.');
@@ -102,7 +108,7 @@ const Header = () => {
 
   const handleRosConnect = () => {
     const newSettings = { ...rosSettings, connected: !rosSettings.connected };
-    handleSettingsChange(newSettings, 'ros');
+    handleSettingsChange(newSettings, 'ros', 'ros');
   };
 
   const handleDroneConnect = (droneId) => {
@@ -112,7 +118,7 @@ const Header = () => {
         drone.id === droneId ? { ...drone, connected: !drone.connected } : drone
       )
     };
-    handleSettingsChange(newSettings, 'ros');
+    handleSettingsChange(newSettings, 'ros', 'ros');
   };
 
   const handleTopicToggle = (topicName, droneId = null) => {
@@ -137,7 +143,7 @@ const Header = () => {
         )
       };
     }
-    handleSettingsChange(newSettings, 'ros');
+    handleSettingsChange(newSettings, 'ros', 'ros');
   };
 
   const handleResetStats = () => {
@@ -146,20 +152,21 @@ const Header = () => {
       currentFlightTime: 0,
       isActive: false
     };
-    handleSettingsChange(newTimeSettings, 'time');
+    handleSettingsChange(newTimeSettings, 'time', 'reset');
+    setUnsavedChanges(prev => ({ ...prev, reset: false }));
     toast.success('Statistics have been reset to default values');
   };
 
   // Handle input changes for ROS settings
   const handleRosInputChange = (field, value) => {
     const newSettings = { ...rosSettings, [field]: value };
-    handleSettingsChange(newSettings, 'ros');
+    handleSettingsChange(newSettings, 'ros', 'ros');
   };
 
   // Handle input changes for time settings
   const handleTimeInputChange = (field, value) => {
     const newSettings = { ...timeSettings, [field]: value };
-    handleSettingsChange(newSettings, 'time');
+    handleSettingsChange(newSettings, 'time', 'time');
   };
 
   const renderSettingsContent = () => {
@@ -290,6 +297,27 @@ const Header = () => {
               </div>
             </div>
           </div>
+          
+          {/* Save Button for ROS Tab */}
+          <div className="mt-6 pt-4 border-t border-gray-700">
+            <Button
+              onClick={() => handleSaveSettings('ros')}
+              className={`w-full transition-all duration-300 ${
+                unsavedChanges.ros 
+                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
+              disabled={!unsavedChanges.ros}
+            >
+              {unsavedChanges.ros ? 'Save ROS Settings' : 'ROS Settings Saved'}
+            </Button>
+            
+            {unsavedChanges.ros && (
+              <p className="text-xs text-yellow-400 mt-2 text-center">
+                You have unsaved ROS changes
+              </p>
+            )}
+          </div>
         );
 
       case 'time':
@@ -345,6 +373,27 @@ const Header = () => {
               </div>
             </div>
           </div>
+          
+          {/* Save Button for Time Tab */}
+          <div className="mt-6 pt-4 border-t border-gray-700">
+            <Button
+              onClick={() => handleSaveSettings('time')}
+              className={`w-full transition-all duration-300 ${
+                unsavedChanges.time 
+                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
+              disabled={!unsavedChanges.time}
+            >
+              {unsavedChanges.time ? 'Save Time Settings' : 'Time Settings Saved'}
+            </Button>
+            
+            {unsavedChanges.time && (
+              <p className="text-xs text-yellow-400 mt-2 text-center">
+                You have unsaved time changes
+              </p>
+            )}
+          </div>
         );
 
       case 'reset':
@@ -376,6 +425,27 @@ const Header = () => {
               </div>
             </div>
           </div>
+          
+          {/* Save Button for Reset Tab */}
+          <div className="mt-6 pt-4 border-t border-gray-700">
+            <Button
+              onClick={() => handleSaveSettings('reset')}
+              className={`w-full transition-all duration-300 ${
+                unsavedChanges.reset 
+                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
+              disabled={!unsavedChanges.reset}
+            >
+              {unsavedChanges.reset ? 'Save Reset Settings' : 'Reset Settings Saved'}
+            </Button>
+            
+            {unsavedChanges.reset && (
+              <p className="text-xs text-yellow-400 mt-2 text-center">
+                You have unsaved reset changes
+              </p>
+            )}
+          </div>
         );
 
       case 'power':
@@ -403,6 +473,27 @@ const Header = () => {
                 </div>
               </div>
             </div>
+          </div>
+          
+          {/* Save Button for Power Tab */}
+          <div className="mt-6 pt-4 border-t border-gray-700">
+            <Button
+              onClick={() => handleSaveSettings('power')}
+              className={`w-full transition-all duration-300 ${
+                unsavedChanges.power 
+                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
+              disabled={!unsavedChanges.power}
+            >
+              {unsavedChanges.power ? 'Save Power Settings' : 'Power Settings Saved'}
+            </Button>
+            
+            {unsavedChanges.power && (
+              <p className="text-xs text-yellow-400 mt-2 text-center">
+                You have unsaved power changes
+              </p>
+            )}
           </div>
         );
 
@@ -439,6 +530,27 @@ const Header = () => {
                 </div>
               </div>
             </div>
+          </div>
+          
+          {/* Save Button for General Tab */}
+          <div className="mt-6 pt-4 border-t border-gray-700">
+            <Button
+              onClick={() => handleSaveSettings('general')}
+              className={`w-full transition-all duration-300 ${
+                unsavedChanges.general 
+                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
+              disabled={!unsavedChanges.general}
+            >
+              {unsavedChanges.general ? 'Save General Settings' : 'General Settings Saved'}
+            </Button>
+            
+            {unsavedChanges.general && (
+              <p className="text-xs text-yellow-400 mt-2 text-center">
+                You have unsaved general changes
+              </p>
+            )}
           </div>
         );
 
@@ -543,27 +655,6 @@ const Header = () => {
           {/* Settings Content */}
           <div className="flex-1 p-6 overflow-y-auto">
             {renderSettingsContent()}
-            
-            {/* Save Button */}
-            <div className="sticky bottom-0 bg-gray-900 pt-4 mt-6 border-t border-gray-700">
-              <Button
-                onClick={handleSaveSettings}
-                className={`w-full transition-all duration-300 ${
-                  hasUnsavedChanges 
-                    ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
-                    : 'bg-green-600 hover:bg-green-700'
-                }`}
-                disabled={!hasUnsavedChanges}
-              >
-                {hasUnsavedChanges ? 'Save Changes' : 'All Changes Saved'}
-              </Button>
-              
-              {hasUnsavedChanges && (
-                <p className="text-xs text-yellow-400 mt-2 text-center">
-                  You have unsaved changes
-                </p>
-              )}
-            </div>
           </div>
         </div>
       </div>
