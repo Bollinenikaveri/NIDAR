@@ -1,10 +1,10 @@
 import ROSLIB, { Ros} from "roslib";
 
-
+import { parseKmlPolygon } from '../lib/parse-utils';
 
 class MockDataService {
   constructor() {
-    this.url = 'ws://100.107.6.16:8765'; // Default to localhost if not set
+    this.url = 'ws://192.168.1.9:9090'; // Default to localhost if not set
         // Initialize ROS connection
     this.ros = new Ros({
       url: this.url
@@ -180,15 +180,52 @@ class MockDataService {
     return path;
   }
 
-  getKMLData() {
+  getKMLData(file) {
+    if (!file) {
+      // If no file is provided, return a default polygon
+      return Promise.resolve(this.getDefaultKMLPolygon());
+    }
+
+    let kmlData = parseKmlPolygon(file);
+    
+    console.log('KML Data:', kmlData);
+
+   let coordinates = kmlData;
+   console.log('KML Coordinates:', typeof coordinates
+   );
+
+let request = {
+  polygon_x: coordinates.map(coord => coord.lng),
+  polygon_y: coordinates.map(coord => coord.lat),
+  safe_margin: 1.0,      // or user-defined
+  spacing: 1.0,          // or user-defined
+  angle: 0.0             // or user-defined (in degrees)
+};
+
+let pathService = new ROSLIB.Service({
+  ros: this.ros,
+  name: '/get_lawnmower_path',
+  serviceType: 'mission_interfaces/srv/GetLawnmowerPath'
+});
+
+pathService.callService(request, function(result) {
+  console.log("Waypoints X:", result.waypoint_x);
+  console.log("Waypoints Y:", result.waypoint_y);
+  // You can zip them or plot them on a map here
+});
+
+
+  }
+  getDefaultKMLPolygon() {
     return {
-      name: 'Search Area Alpha',
+      name: 'Default Search Area',
       coordinates: [
         [this.baseLocation.lng - 0.01, this.baseLocation.lat - 0.01],
         [this.baseLocation.lng + 0.01, this.baseLocation.lat - 0.01],
         [this.baseLocation.lng + 0.01, this.baseLocation.lat + 0.01],
-        [this.baseLocation.lng - 0.01, this.baseLocation.lat + 0.01],
-        [this.baseLocation.lng - 0.01, this.baseLocation.lat - 0.01]
+        [this.baseLocation.lng - 0.01, this.baseLocation.lat + 0.01]      
+
+  
       ]
     };
   }

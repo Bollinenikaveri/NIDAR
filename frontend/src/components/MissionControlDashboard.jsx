@@ -17,18 +17,7 @@ const MissionControlDashboard = () => {
   const [kmlData, setKmlData] = useState(null);
 
   useEffect(() => {
-    // Load sample KML data on component mount to demonstrate functionality
-    const loadSampleKML = async () => {
-      try {
-        const sampleKML = await mockDataService.getKMLData(null);
-        setKmlData(sampleKML);
-        console.log('Sample KML data loaded:', sampleKML);
-      } catch (error) {
-        console.error('Error loading sample KML:', error);
-      }
-    };
-    
-    loadSampleKML();
+
 
     // Simulate real-time updates
     const interval = setInterval(() => {
