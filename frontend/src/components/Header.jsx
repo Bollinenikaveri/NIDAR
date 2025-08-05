@@ -296,10 +296,7 @@ const Header = () => {
                 </div>
               </div>
             </div>
-          </div>
-          
-          {/* Save Button for ROS Tab */}
-          <div className="mt-6 pt-4 border-t border-gray-700">
+                      <div className="mt-6 pt-4 border-t border-gray-700">
             <Button
               onClick={() => handleSaveSettings('ros')}
               className={`w-full transition-all duration-300 ${
@@ -318,7 +315,10 @@ const Header = () => {
               </p>
             )}
           </div>
-        );
+        
+          </div>);
+          
+     
 
       case 'time':
         return (
@@ -372,13 +372,10 @@ const Header = () => {
                 </div>
               </div>
             </div>
-          </div>
-          
-          {/* Save Button for Time Tab */}
-          <div className="mt-6 pt-4 border-t border-gray-700">
-            <Button
-              onClick={() => handleSaveSettings('time')}
-              className={`w-full transition-all duration-300 ${
+             <div className="mt-6 pt-4 border-t border-gray-700">
+        <Button
+          onClick={() => handleSaveSettings('time')}
+          className={`w-full transition-all duration-300 ${
                 unsavedChanges.time 
                   ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
                   : 'bg-green-600 hover:bg-green-700'
@@ -394,8 +391,9 @@ const Header = () => {
               </p>
             )}
           </div>
-        );
-
+          </div>
+          );
+     
       case 'reset':
         return (
           <div className="space-y-6">
@@ -424,7 +422,7 @@ const Header = () => {
                 </Button>
               </div>
             </div>
-          </div>
+          </div>);
           
           {/* Save Button for Reset Tab */}
           <div className="mt-6 pt-4 border-t border-gray-700">
@@ -446,7 +444,7 @@ const Header = () => {
               </p>
             )}
           </div>
-        );
+      
 
       case 'power':
         return (
@@ -473,10 +471,7 @@ const Header = () => {
                 </div>
               </div>
             </div>
-          </div>
-          
-          {/* Save Button for Power Tab */}
-          <div className="mt-6 pt-4 border-t border-gray-700">
+                   <div className="mt-6 pt-4 border-t border-gray-700">
             <Button
               onClick={() => handleSaveSettings('power')}
               className={`w-full transition-all duration-300 ${
@@ -494,6 +489,8 @@ const Header = () => {
                 You have unsaved power changes
               </p>
             )}
+          </div>
+        
           </div>
         );
 
@@ -530,10 +527,7 @@ const Header = () => {
                 </div>
               </div>
             </div>
-          </div>
-          
-          {/* Save Button for General Tab */}
-          <div className="mt-6 pt-4 border-t border-gray-700">
+              <div className="mt-6 pt-4 border-t border-gray-700">
             <Button
               onClick={() => handleSaveSettings('general')}
               className={`w-full transition-all duration-300 ${
@@ -552,9 +546,13 @@ const Header = () => {
               </p>
             )}
           </div>
-        );
+       
+          </div>
+          
+          );
+        
 
-      default:
+     case 'default':
         return null;
     }
   };
