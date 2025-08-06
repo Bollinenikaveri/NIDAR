@@ -16,6 +16,7 @@ const Header = ({ onMaxFlightTimeChange }) => {
   const [activeTab, setActiveTab] = useState('ros');
   const [unsavedChanges, setUnsavedChanges] = useState({
     ros: false,
+    video: false,
     time: false,
     reset: false,
   });
@@ -37,8 +38,26 @@ const Header = ({ onMaxFlightTimeChange }) => {
     isActive: false
   });
 
+  const [videoSettings, setVideoSettings] = useState({
+    scoutDrone: {
+      host: 'localhost',
+      port: '8080',
+      streamUrl: '/video/scout',
+      connected: false
+    },
+    deliveryDrone: {
+      host: 'localhost',
+      port: '8081',
+      streamUrl: '/video/delivery',
+      connected: false
+    }
+  });
+
+  const [globalConnectionStatus, setGlobalConnectionStatus] = useState(false);
+
   const sidebarItems = [
     { id: 'ros', label: 'ROS2 Communications', icon: Radio },
+    { id: 'video', label: 'Video Configuration', icon: Radio },
     { id: 'time', label: 'Flight Time Limits', icon: Clock },
     { id: 'reset', label: 'Reset', icon: RotateCcw },
   ];
@@ -57,6 +76,8 @@ const Header = ({ onMaxFlightTimeChange }) => {
         const parsed = JSON.parse(saved);
         if (parsed.rosSettings) setRosSettings(parsed.rosSettings);
         if (parsed.timeSettings) setTimeSettings(parsed.timeSettings);
+        if (parsed.videoSettings) setVideoSettings(parsed.videoSettings);
+        if (parsed.globalConnectionStatus) setGlobalConnectionStatus(parsed.globalConnectionStatus);
 
         // Emit max flight time on load
         if (parsed.timeSettings && onMaxFlightTimeChange) {
@@ -90,6 +111,7 @@ const Header = ({ onMaxFlightTimeChange }) => {
   const handleSettingsChange = (newSettings, type, tab) => {
     if (type === 'ros') setRosSettings(newSettings);
     else if (type === 'time') setTimeSettings(newSettings);
+    else if (type === 'video') setVideoSettings(newSettings);
     setUnsavedChanges(prev => ({ ...prev, [tab]: true }));
   };
 
@@ -97,7 +119,7 @@ const Header = ({ onMaxFlightTimeChange }) => {
     try {
       localStorage.setItem(
         'nidarSettings',
-        JSON.stringify({ rosSettings, timeSettings, savedAt: new Date().toISOString() })
+        JSON.stringify({ rosSettings, timeSettings, videoSettings, globalConnectionStatus, savedAt: new Date().toISOString() })
       );
       setUnsavedChanges(prev => ({ ...prev, [tab]: false }));
       toast.success(`${tab.charAt(0).toUpperCase() + tab.slice(1)} settings saved!`);
@@ -112,27 +134,159 @@ const Header = ({ onMaxFlightTimeChange }) => {
   };
 
   // ROS logic
-  const handleRosConnect = () =>
-    handleSettingsChange({ ...rosSettings, connected: !rosSettings.connected }, 'ros', 'ros');
+  const handleRosConnect = () => {
+    const newConnectedState = !rosSettings.connected;
+    const newRosSettings = { ...rosSettings, connected: newConnectedState };
+    setRosSettings(newRosSettings);
+    setUnsavedChanges({...unsavedChanges, ros:true})
+    
+    // Immediately save to localStorage to persist the connection state
+    const updatedSettings = {
+      rosSettings: newRosSettings,
+      timeSettings,
+      videoSettings,
+      globalConnectionStatus,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    
+    toast.success(newConnectedState ? 'Connected to ROS2!' : 'Disconnected from ROS2!');
+  };
 
-  const handleDroneConnect = id =>
-    handleSettingsChange({
+  const handleDroneConnect = id => {
+    const newRosSettings = {
       ...rosSettings,
       drones: rosSettings.drones.map(d =>
         d.id === id ? { ...d, connected: !d.connected } : d)
-    }, 'ros', 'ros');
+    };
+    setRosSettings(newRosSettings);
+    setUnsavedChanges({...unsavedChanges, ros:true})
+    
+    // Immediately save to localStorage to persist the connection state
+    const updatedSettings = {
+      rosSettings: newRosSettings,
+      timeSettings,
+      videoSettings,
+      globalConnectionStatus,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    
+    const drone = rosSettings.drones.find(d => d.id === id);
+    toast.success(`${drone.name} ${!drone.connected ? 'Connected' : 'Disconnected'}!`);
+  };
 
-  const handleRosInputChange = (field, val) =>
-    handleSettingsChange({ ...rosSettings, [field]: val }, 'ros', 'ros');
+  const handleRosInputChange = (field, val) => {
+    const newRosSettings = { ...rosSettings, [field]: val };
+    setRosSettings(newRosSettings);
+    setUnsavedChanges({...unsavedChanges, ros:true})
+    
+    // Immediately save to localStorage to persist the changes
+    const updatedSettings = {
+      rosSettings: newRosSettings,
+      timeSettings,
+      videoSettings,
+      globalConnectionStatus,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+  };
 
   // Time inputs
-  const handleTimeInputChange = (field, val) =>
-    handleSettingsChange({ ...timeSettings, [field]: val }, 'time', 'time');
+  const handleTimeInputChange = (field, val) => {
+    const newTimeSettings = { ...timeSettings, [field]: val };
+    setTimeSettings(newTimeSettings);
+    setUnsavedChanges({...unsavedChanges, time:true})
+    
+    // Immediately save to localStorage to persist the changes
+    const updatedSettings = {
+      rosSettings,
+      timeSettings: newTimeSettings,
+      videoSettings,
+      globalConnectionStatus,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    
+    // Emit updated max flight time to parent if needed
+    if (field === 'maxFlightTime' && onMaxFlightTimeChange) {
+      onMaxFlightTimeChange(val);
+    }
+  };
+
+  // Video configuration handlers
+  const handleVideoInputChange = (drone, field, value) => {
+    const newVideoSettings = {
+      ...videoSettings,
+      [drone]: {
+        ...videoSettings[drone],
+        [field]: value
+      }
+    };
+    setVideoSettings(newVideoSettings);
+    setUnsavedChanges({...unsavedChanges, video:true})
+    
+    // Immediately save to localStorage to persist the changes
+    const updatedSettings = {
+      rosSettings,
+      timeSettings,
+      videoSettings: newVideoSettings,
+      globalConnectionStatus,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+  };
+
+  const handleGlobalConnect = () => {
+    const newStatus = !globalConnectionStatus;
+    setGlobalConnectionStatus(newStatus);
+    
+    // Update connection status for ROS and saved video drones
+    const updatedRosSettings = { ...rosSettings, connected: newStatus };
+    const updatedVideoSettings = {
+      ...videoSettings,
+      scoutDrone: { ...videoSettings.scoutDrone, connected: newStatus },
+      deliveryDrone: { ...videoSettings.deliveryDrone, connected: newStatus }
+    };
+    
+    setRosSettings(updatedRosSettings);
+    setVideoSettings(updatedVideoSettings);
+    
+    // Save to localStorage
+    localStorage.setItem(
+      'nidarSettings',
+      JSON.stringify({ 
+        rosSettings: updatedRosSettings, 
+        timeSettings, 
+        videoSettings: updatedVideoSettings, 
+        globalConnectionStatus: newStatus,
+        savedAt: new Date().toISOString() 
+      })
+    );
+    
+    toast.success(newStatus ? 'Connected to ROS server and drones!' : 'Disconnected from ROS server and drones!');
+  };
 
   // Reset
   const handleResetStats = () => {
     const resetTime = { maxFlightTime: 30, currentFlightTime: 0, isActive: false };
-    handleSettingsChange(resetTime, 'time', 'reset');
+    setTimeSettings(resetTime);
+    
+    // Immediately save to localStorage to persist the reset
+    const updatedSettings = {
+      rosSettings,
+      timeSettings: resetTime,
+      videoSettings,
+      globalConnectionStatus,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    
+    // Emit updated max flight time to parent
+    if (onMaxFlightTimeChange) {
+      onMaxFlightTimeChange(resetTime.maxFlightTime);
+    }
+    
     setUnsavedChanges(prev => ({ ...prev, reset: false }));
     toast.success('Statistics reset to default.');
   };
@@ -211,6 +365,7 @@ const Header = ({ onMaxFlightTimeChange }) => {
               <label className="text-xs text-gray-400">Maximum Flight Time (minutes)</label>
               <input
                 type="number"
+                
                 min="0"
                 step="0.1"
                 max="120"
@@ -218,24 +373,6 @@ const Header = ({ onMaxFlightTimeChange }) => {
                 onChange={e => handleTimeInputChange('maxFlightTime', parseFloat(e.target.value) || 0)}
                 className="w-full bg-gray-700 text-white rounded px-3 py-2"
               />
-              <div className="mt-4 text-2xl font-mono text-cyan-300">
-                {String(Math.floor(currentFlightTime / 60)).padStart(2, '0')}:
-                {String(currentFlightTime % 60).padStart(2, '0')}
-              </div>
-              <div className="w-full bg-gray-700 h-2 rounded mt-2">
-                <div className="bg-blue-500 h-2 rounded" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="flex space-x-2 mt-4">
-                <Button
-                  onClick={() => handleTimeInputChange('isActive', !isActive)}
-                  className={isActive ? 'bg-red-600' : 'bg-green-600'}
-                >
-                  {isActive ? 'Stop Timer' : 'Start Timer'}
-                </Button>
-                <Button variant="outline" onClick={() => handleTimeInputChange('currentFlightTime', 0)}>
-                  Reset Timer
-                </Button>
-              </div>
             </div>
             <div className="mt-6 border-t pt-4">
               <Button
@@ -246,6 +383,103 @@ const Header = ({ onMaxFlightTimeChange }) => {
                 {unsavedChanges.time ? 'Save Time Settings' : 'Time Settings Saved'}
               </Button>
               {unsavedChanges.time && <p className="text-xs text-yellow-400 mt-2">Unsaved time changes</p>}
+            </div>
+          </div>
+        );
+
+      case 'video':
+        return (
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-blue-400">Video Configuration</h3>
+            
+            {/* Scout Drone Configuration */}
+            <div className="bg-gray-800/50 rounded p-4">
+              <h4 className="text-md font-semibold text-green-400 mb-3">Scout Drone</h4>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-gray-400">Video Host</label>
+                  <input
+                    type="text"
+                    value={videoSettings.scoutDrone.host}
+                    onChange={e => handleVideoInputChange('scoutDrone', 'host', e.target.value)}
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400">Port</label>
+                  <input
+                    type="text"
+                    value={videoSettings.scoutDrone.port}
+                    onChange={e => handleVideoInputChange('scoutDrone', 'port', e.target.value)}
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="mb-4">
+                <label className="text-xs text-gray-400">Stream URL</label>
+                <input
+                  type="text"
+                  value={videoSettings.scoutDrone.streamUrl}
+                  onChange={e => handleVideoInputChange('scoutDrone', 'streamUrl', e.target.value)}
+                  className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
+                />
+              </div>
+              {videoSettings.scoutDrone.connected && (
+                <div className="text-green-400 text-sm flex items-center">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2" />
+                  Connected to {videoSettings.scoutDrone.host}:{videoSettings.scoutDrone.port}
+                </div>
+              )}
+            </div>
+
+            {/* Delivery Drone Configuration */}
+            <div className="bg-gray-800/50 rounded p-4">
+              <h4 className="text-md font-semibold text-blue-400 mb-3">Delivery Drone</h4>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-gray-400">Video Host</label>
+                  <input
+                    type="text"
+                    value={videoSettings.deliveryDrone.host}
+                    onChange={e => handleVideoInputChange('deliveryDrone', 'host', e.target.value)}
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400">Port</label>
+                  <input
+                    type="text"
+                    value={videoSettings.deliveryDrone.port}
+                    onChange={e => handleVideoInputChange('deliveryDrone', 'port', e.target.value)}
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="mb-4">
+                <label className="text-xs text-gray-400">Stream URL</label>
+                <input
+                  type="text"
+                  value={videoSettings.deliveryDrone.streamUrl}
+                  onChange={e => handleVideoInputChange('deliveryDrone', 'streamUrl', e.target.value)}
+                  className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
+                />
+              </div>
+              {videoSettings.deliveryDrone.connected && (
+                <div className="text-green-400 text-sm flex items-center">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2" />
+                  Connected to {videoSettings.deliveryDrone.host}:{videoSettings.deliveryDrone.port}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 border-t pt-4">
+              <Button
+                onClick={() => handleSaveSettings('video')}
+                className={`w-full ${unsavedChanges.video ? 'bg-blue-600 animate-pulse' : 'bg-green-600'}`}
+                disabled={!unsavedChanges.video}
+              >
+                {unsavedChanges.video ? 'Save Video Configuration' : 'Video Configuration Saved'}
+              </Button>
             </div>
           </div>
         );
@@ -286,6 +520,13 @@ const Header = ({ onMaxFlightTimeChange }) => {
               </h1>
               <p className="text-gray-400 text-sm">Search and Rescue Operations</p>
             </div>
+            <Button 
+              onClick={handleGlobalConnect}
+              className={`${globalConnectionStatus ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} transition-colors`}
+            >
+              <Wifi className="w-4 h-4 mr-2" />
+              {globalConnectionStatus ? 'Connected' : 'Connect'}
+            </Button>
           </div>
           <div className="text-right">
             <div className="text-2xl font-mono text-cyan-300">

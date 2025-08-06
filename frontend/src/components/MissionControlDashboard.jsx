@@ -15,15 +15,14 @@ const MissionControlDashboard = () => {
   const [missionActive, setMissionActive] = useState(false);
   const [kmlFile, setKmlFile] = useState(null);
   const [kmlData, setKmlData] = useState(null);
+  const [maxFlightTime, setMaxFlightTime] = useState(null);
 
   useEffect(() => {
-
-
     // Simulate real-time updates
     const interval = setInterval(() => {
       setDroneData(mockDataService.getDroneData());
       setMissionData(mockDataService.getMissionData());
-      
+
       // Occasionally add new alerts
       if (Math.random() > 0.8) {
         setAlerts(prev => [mockDataService.generateAlert(), ...prev.slice(0, 4)]);
@@ -74,40 +73,44 @@ const MissionControlDashboard = () => {
     }
   };
 
+  const handleMaxFlightTimeChange = (time) => {
+    setMaxFlightTime(time);
+  };
+
   return (
     <div className="min-h-screen bg-gray-950 text-white overflow-hidden">
       <div className="h-screen flex flex-col">
         {/* Header */}
-        <Header />
-        
+        <Header onMaxFlightTimeChange={handleMaxFlightTimeChange} />
+
         {/* Main Dashboard Grid */}
         <div className="flex-1 grid grid-cols-12 gap-4 p-4 min-h-0">
           {/* Left Panel */}
           <div className="col-span-3 flex flex-col gap-4 min-h-0">
             {/* Live Feed */}
             <div className="h-64">
-              <LiveFeed 
+              <LiveFeed
                 selectedFeed={selectedFeed}
                 setSelectedFeed={setSelectedFeed}
                 droneData={droneData}
               />
             </div>
-            
+
             {/* Drone Status Panel */}
             <div className="flex-1 min-h-0">
-              <DroneStatusPanel 
+              <DroneStatusPanel
                 droneData={droneData}
                 missionActive={missionActive}
               />
             </div>
           </div>
-          
+
           {/* Center - Main Map */}
           <div className="col-span-6 min-h-0">
             <div className="h-full bg-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-4">
               <h3 className="text-lg font-semibold mb-4 text-blue-400">Mission Area Overview</h3>
               <div className="h-[calc(100%-2rem)] bg-gray-800 rounded-lg relative overflow-hidden">
-                <MissionMap 
+                <MissionMap
                   droneData={droneData}
                   missionActive={missionActive}
                   isMainMap={true}
@@ -116,12 +119,12 @@ const MissionControlDashboard = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Right Panel */}
           <div className="col-span-3 flex flex-col gap-4 min-h-0">
             {/* Mission Control with KML Upload */}
             <div className="flex-1">
-              <MissionControlCard 
+              <MissionControlCard
                 missionData={missionData}
                 droneData={droneData}
                 missionActive={missionActive}
@@ -129,12 +132,13 @@ const MissionControlDashboard = () => {
                 onAbortMission={handleAbortMission}
                 kmlFile={kmlFile}
                 onKMLUpload={handleKMLUpload}
+                maxFlightTime={maxFlightTime}
               />
             </div>
-            
+
             {/* Alerts */}
             <div className="flex-1">
-              <AlertsSection 
+              <AlertsSection
                 alerts={alerts}
                 onClearAlerts={handleClearAlerts}
                 onMarkAllRead={handleMarkAllRead}

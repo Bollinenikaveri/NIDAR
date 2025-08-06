@@ -85,12 +85,12 @@ const MissionControlCard = ({
     timerRef.current = null;
   };
 
-  // ✅ Stop automatically if exceeding max flight time
+  // ✅ Show warning if exceeding max flight time
   useEffect(() => {
     const limitInSeconds = maxFlightTime * 60;
-    if (elapsedTime >= limitInSeconds && missionActive) {
+    if (elapsedTime >= limitInSeconds && missionActive && limitInSeconds > 0) {
       setShowNotification(true);
-      handleAbortMission();
+      // Don't automatically abort, just show warning
     }
   }, [elapsedTime, maxFlightTime, missionActive]);
 
@@ -103,7 +103,7 @@ const MissionControlCard = ({
       {showNotification && (
         <div className="absolute top-2 right-2 bg-red-600 text-white px-4 py-2 rounded shadow-lg flex items-center space-x-2 z-50">
           <AlertTriangle className="w-5 h-5" />
-          <span>Elapsed time exceeded flight limit!</span>
+          <span>Flight time limit ({maxFlightTime} min) exceeded!</span>
           <button
             onClick={() => setShowNotification(false)}
             className="ml-2 text-white font-bold hover:text-gray-200"
@@ -185,7 +185,16 @@ const MissionControlCard = ({
           </div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-400">Elapsed Time</span>
-            <span className="text-sm font-mono text-white">{formatElapsedTime(elapsedTime)}</span>
+            <span className={`text-sm font-mono ${
+              elapsedTime >= (maxFlightTime * 60) ? 'text-red-400' : 
+              elapsedTime >= (maxFlightTime * 60 * 0.8) ? 'text-yellow-400' : 'text-white'
+            }`}>
+              {formatElapsedTime(elapsedTime)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm text-gray-400">Time Limit</span>
+            <span className="text-sm font-mono text-cyan-300">{formatElapsedTime(maxFlightTime * 60)}</span>
           </div>
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-gray-400">Status</span>
