@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Lock, Wifi, Settings, X, ArrowLeft, Radio, Clock, RotateCcw, Power, Settings as SettingsIcon } from 'lucide-react';
+import {
+  Wifi,
+  Settings as SettingsIcon,
+  X,
+  Radio,
+  Clock,
+  RotateCcw,
+} from 'lucide-react';
 import { Button } from './ui/button';
 import { toast } from 'sonner';
 
-const Header = () => {
+const Header = ({ onMaxFlightTimeChange }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState('ros');
@@ -11,35 +18,19 @@ const Header = () => {
     ros: false,
     time: false,
     reset: false,
-    power: false,
-    general: false
   });
+
   const [rosSettings, setRosSettings] = useState({
     host: 'localhost',
     port: '9090',
     connected: false,
     drones: [
-      {
-        id: 'scout',
-        name: 'Scout Drone',
-        connected: false,
-        topics: []
-      },
-      {
-        id: 'delivery',
-        name: 'Delivery Drone',
-        connected: false,
-        topics: []
-      }
+      { id: 'scout', name: 'Scout Drone', connected: false, topics: [] },
+      { id: 'delivery', name: 'Delivery Drone', connected: false, topics: [] }
     ],
-    globalTopics: [
-      { name: '/', enabled: false, type: '/' },
-      { name: '/', enabled: false, type: '/' },
-      { name: '/', enabled: true, type: '/' },
-      { name: '/', enabled: true, type: '/' },
-    ]
+    globalTopics: []
   });
-  
+
   const [timeSettings, setTimeSettings] = useState({
     maxFlightTime: 30, // minutes
     currentFlightTime: 0,
@@ -50,593 +41,280 @@ const Header = () => {
     { id: 'ros', label: 'ROS2 Communications', icon: Radio },
     { id: 'time', label: 'Flight Time Limits', icon: Clock },
     { id: 'reset', label: 'Reset', icon: RotateCcw },
-    { id: 'power', label: 'Power Management', icon: Power },
-    { id: 'general', label: 'General Settings', icon: SettingsIcon }
   ];
 
+  // Real-time clock
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Load saved settings from localStorage on component mount
+  // Load saved settings
   useEffect(() => {
-    const savedSettings = localStorage.getItem('nidarSettings');
-    if (savedSettings) {
+    const saved = localStorage.getItem('nidarSettings');
+    if (saved) {
       try {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed.rosSettings) {
-          setRosSettings(parsed.rosSettings);
+        const parsed = JSON.parse(saved);
+        if (parsed.rosSettings) setRosSettings(parsed.rosSettings);
+        if (parsed.timeSettings) setTimeSettings(parsed.timeSettings);
+
+        // Emit max flight time on load
+        if (parsed.timeSettings && onMaxFlightTimeChange) {
+          onMaxFlightTimeChange(parsed.timeSettings.maxFlightTime);
         }
-        if (parsed.timeSettings) {
-          setTimeSettings(parsed.timeSettings);
-        }
-      } catch (error) {
-        console.error('Error loading saved settings:', error);
+      } catch (e) {
+        console.error('Load settings error', e);
       }
     }
-  }, []);
+  }, [onMaxFlightTimeChange]);
 
-  // Track changes to mark as unsaved
-  const handleSettingsChange = (newSettings, settingsType, tabName) => {
-    if (settingsType === 'ros') {
-      setRosSettings(newSettings);
-    } else if (settingsType === 'time') {
-      setTimeSettings(newSettings);
+  // Flight timer logic—increment every second when active
+  useEffect(() => {
+    let interval;
+    if (timeSettings.isActive) {
+      interval = setInterval(() => {
+        setTimeSettings(prev => {
+          const next = prev.currentFlightTime + 1;
+          const maxSec = prev.maxFlightTime * 60;
+          if (next >= maxSec && prev.maxFlightTime > 0) {
+            toast.warning('Max flight time reached. Stopping timer.');
+            return { ...prev, currentFlightTime: maxSec, isActive: false };
+          }
+          return { ...prev, currentFlightTime: next };
+        });
+      }, 1000);
     }
-    setUnsavedChanges(prev => ({ ...prev, [tabName]: true }));
+    return () => clearInterval(interval);
+  }, [timeSettings.isActive, timeSettings.maxFlightTime]);
+
+  const handleSettingsChange = (newSettings, type, tab) => {
+    if (type === 'ros') setRosSettings(newSettings);
+    else if (type === 'time') setTimeSettings(newSettings);
+    setUnsavedChanges(prev => ({ ...prev, [tab]: true }));
   };
 
-  // Save settings to localStorage
-  const handleSaveSettings = (tabName) => {
+  const handleSaveSettings = tab => {
     try {
-      const settingsToSave = {
-        rosSettings,
-        timeSettings,
-        savedAt: new Date().toISOString()
-      };
-      localStorage.setItem('nidarSettings', JSON.stringify(settingsToSave));
-      setUnsavedChanges(prev => ({ ...prev, [tabName]: false }));
-      toast.success(`${tabName.charAt(0).toUpperCase() + tabName.slice(1)} settings saved successfully!`);
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      toast.error('Failed to save settings. Please try again.');
+      localStorage.setItem(
+        'nidarSettings',
+        JSON.stringify({ rosSettings, timeSettings, savedAt: new Date().toISOString() })
+      );
+      setUnsavedChanges(prev => ({ ...prev, [tab]: false }));
+      toast.success(`${tab.charAt(0).toUpperCase() + tab.slice(1)} settings saved!`);
+
+      // Emit updated max flight time to parent
+      if (tab === 'time' && onMaxFlightTimeChange) {
+        onMaxFlightTimeChange(timeSettings.maxFlightTime);
+      }
+    } catch {
+      toast.error('Failed to save settings.');
     }
   };
 
-  const handleRosConnect = () => {
-    const newSettings = { ...rosSettings, connected: !rosSettings.connected };
-    handleSettingsChange(newSettings, 'ros', 'ros');
-  };
+  // ROS logic
+  const handleRosConnect = () =>
+    handleSettingsChange({ ...rosSettings, connected: !rosSettings.connected }, 'ros', 'ros');
 
-  const handleDroneConnect = (droneId) => {
-    const newSettings = {
+  const handleDroneConnect = id =>
+    handleSettingsChange({
       ...rosSettings,
-      drones: rosSettings.drones.map(drone =>
-        drone.id === droneId ? { ...drone, connected: !drone.connected } : drone
-      )
-    };
-    handleSettingsChange(newSettings, 'ros', 'ros');
-  };
+      drones: rosSettings.drones.map(d =>
+        d.id === id ? { ...d, connected: !d.connected } : d)
+    }, 'ros', 'ros');
 
-  const handleTopicToggle = (topicName, droneId = null) => {
-    let newSettings;
-    if (droneId) {
-      newSettings = {
-        ...rosSettings,
-        drones: rosSettings.drones.map(drone =>
-          drone.id === droneId ? {
-            ...drone,
-            topics: drone.topics.map(topic =>
-              topic.name === topicName ? { ...topic, enabled: !topic.enabled } : topic
-            )
-          } : drone
-        )
-      };
-    } else {
-      newSettings = {
-        ...rosSettings,
-        globalTopics: rosSettings.globalTopics.map(topic =>
-          topic.name === topicName ? { ...topic, enabled: !topic.enabled } : topic
-        )
-      };
-    }
-    handleSettingsChange(newSettings, 'ros', 'ros');
-  };
+  const handleRosInputChange = (field, val) =>
+    handleSettingsChange({ ...rosSettings, [field]: val }, 'ros', 'ros');
 
+  // Time inputs
+  const handleTimeInputChange = (field, val) =>
+    handleSettingsChange({ ...timeSettings, [field]: val }, 'time', 'time');
+
+  // Reset
   const handleResetStats = () => {
-    const newTimeSettings = {
-      maxFlightTime: 30,
-      currentFlightTime: 0,
-      isActive: false
-    };
-    handleSettingsChange(newTimeSettings, 'time', 'reset');
+    const resetTime = { maxFlightTime: 30, currentFlightTime: 0, isActive: false };
+    handleSettingsChange(resetTime, 'time', 'reset');
     setUnsavedChanges(prev => ({ ...prev, reset: false }));
-    toast.success('Statistics have been reset to default values');
+    toast.success('Statistics reset to default.');
   };
 
-  // Handle input changes for ROS settings
-  const handleRosInputChange = (field, value) => {
-    const newSettings = { ...rosSettings, [field]: value };
-    handleSettingsChange(newSettings, 'ros', 'ros');
-  };
-
-  // Handle input changes for time settings
-  const handleTimeInputChange = (field, value) => {
-    const newSettings = { ...timeSettings, [field]: value };
-    handleSettingsChange(newSettings, 'time', 'time');
-  };
-
+  // Sidebar content
   const renderSettingsContent = () => {
     switch (activeTab) {
       case 'ros':
         return (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-blue-400 mb-4">ROS2 Communications</h3>
-              
-              {/* Connection Settings */}
-              <div className="bg-gray-800/50 rounded-lg p-4 mb-4">
-                <h4 className="text-sm font-semibold text-gray-300 mb-3">Connection Configuration</h4>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">ROS2 Host</label>
-                    <input
-                      type="text"
-                      value={rosSettings.host}
-                      onChange={(e) => handleRosInputChange('host', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      placeholder="localhost"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Port</label>
-                    <input
-                      type="text"
-                      value={rosSettings.port}
-                      onChange={(e) => handleRosInputChange('port', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm"
-                      placeholder="9090"
-                    />
-                  </div>
-                </div>
-                
-                <Button
-                  onClick={handleRosConnect}
-                  className={`w-full ${rosSettings.connected 
-                    ? 'bg-red-600 hover:bg-red-700' 
-                    : 'bg-green-600 hover:bg-green-700'
-                  }`}
-                >
-                  <Wifi className="w-4 h-4 mr-2" />
-                  {rosSettings.connected ? 'Disconnect' : 'Connect'} to ROS2
-                </Button>
-                
-                {rosSettings.connected && (
-                  <div className="mt-2 flex items-center text-green-400 text-sm">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2"></div>
-                    Connected to {rosSettings.host}:{rosSettings.port}
-                  </div>
-                )}
-              </div>
-
-              {/* Drone Management */}
-              <div className="space-y-4">
-                {rosSettings.drones.map((drone) => (
-                  <div key={drone.id} className="bg-gray-800/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-semibold text-gray-300">{drone.name}</h4>
-                      <button
-                        onClick={() => handleDroneConnect(drone.id)}
-                        className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                          drone.connected
-                            ? 'bg-red-600 text-white hover:bg-red-700'
-                            : 'bg-green-600 text-white hover:bg-green-700'
-                        }`}
-                      >
-                        {drone.connected ? 'Disconnect' : 'Connect'}
-                      </button>
-                    </div>
-                    
-                    {drone.connected && (
-                      <div className="mb-2 flex items-center text-green-400 text-xs">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2"></div>
-                        {drone.name} Connected
-                      </div>
-                    )}
-                    
-                    <div className="space-y-2 max-h-32 overflow-y-auto">
-                      {drone.topics.map((topic, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-gray-700/50 rounded">
-                          <div className="flex-1">
-                            <div className="text-xs text-white">{topic.name}</div>
-                            <div className="text-xs text-gray-400">{topic.type}</div>
-                          </div>
-                          <button
-                            onClick={() => handleTopicToggle(topic.name, drone.id)}
-                            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                              topic.enabled
-                                ? 'bg-green-600 text-white hover:bg-green-700'
-                                : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-                            }`}
-                          >
-                            {topic.enabled ? 'ON' : 'OFF'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Global Topics */}
-              <div className="bg-gray-800/50 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-gray-300 mb-3">ROS Topics</h4>
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {rosSettings.globalTopics.map((topic, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-gray-700/50 rounded">
-                      <div className="flex-1">
-                        <div className="text-xs text-white">{topic.name}</div>
-                        <div className="text-xs text-gray-400">{topic.type}</div>
-                      </div>
-                      <button
-                        onClick={() => handleTopicToggle(topic.name)}
-                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                          topic.enabled
-                            ? 'bg-green-600 text-white hover:bg-green-700'
-                            : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
-                        }`}
-                      >
-                        {topic.enabled ? 'ON' : 'OFF'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-                      <div className="mt-6 pt-4 border-t border-gray-700">
-            <Button
-              onClick={() => handleSaveSettings('ros')}
-              className={`w-full transition-all duration-300 ${
-                unsavedChanges.ros 
-                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
-                  : 'bg-green-600 hover:bg-green-700'
-              }`}
-              disabled={!unsavedChanges.ros}
-            >
-              {unsavedChanges.ros ? 'Save ROS Settings' : 'ROS Settings Saved'}
-            </Button>
-            
-            {unsavedChanges.ros && (
-              <p className="text-xs text-yellow-400 mt-2 text-center">
-                You have unsaved ROS changes
-              </p>
-            )}
-          </div>
-        
-          </div>);
-          
-     
-
-      case 'time':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-blue-400 mb-4">Flight Time Management</h3>
-              
-              <div className="bg-gray-800/50 rounded-lg p-4 mb-4">
-                <h4 className="text-sm font-semibold text-gray-300 mb-3">Time Limits</h4>
-                
-                <div className="mb-4">
-                  <label className="block text-xs text-gray-400 mb-2">Maximum Flight Time (minutes)</label>
+            <h3 className="text-lg font-semibold text-blue-400">ROS2 Communications</h3>
+            <div className="bg-gray-800/50 rounded p-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-gray-400">ROS2 Host</label>
                   <input
-                    type="number"
-                    value={timeSettings.maxFlightTime}
-                    onChange={(e) => handleTimeInputChange('maxFlightTime', parseInt(e.target.value) || 30)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
-                    min="1"
-                    max="120"
+                    type="text"
+                    value={rosSettings.host}
+                    onChange={e => handleRosInputChange('host', e.target.value)}
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
                   />
                 </div>
-
-                <div className="mb-4">
-                  <label className="block text-xs text-gray-400 mb-2">Current Flight Time</label>
-                  <div className="text-2xl font-mono text-cyan-300 mb-2">
-                    {Math.floor(timeSettings.currentFlightTime / 60).toString().padStart(2, '0')}:
-                    {(timeSettings.currentFlightTime % 60).toString().padStart(2, '0')}
-                  </div>
-                  <div className="w-full bg-gray-700 rounded-full h-2">
-                    <div 
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min((timeSettings.currentFlightTime / (timeSettings.maxFlightTime * 60)) * 100, 100)}%` }}
-                    ></div>
-                  </div>
+                <div>
+                  <label className="text-xs text-gray-400">Port</label>
+                  <input
+                    type="text"
+                    value={rosSettings.port}
+                    onChange={e => handleRosInputChange('port', e.target.value)}
+                    className="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
+                  />
                 </div>
-
-                <div className="flex space-x-2">
-                  <Button
-                    onClick={() => handleTimeInputChange('isActive', !timeSettings.isActive)}
-                    className={timeSettings.isActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}
+              </div>
+              <Button onClick={handleRosConnect} className={`w-full ${rosSettings.connected ? 'bg-red-600' : 'bg-green-600'}`}>
+                <Wifi className="w-4 h-4 mr-2" />
+                {rosSettings.connected ? 'Disconnect' : 'Connect'} to ROS2
+              </Button>
+              {rosSettings.connected && (
+                <div className="mt-2 text-green-400 text-sm flex items-center">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-2" />
+                  Connected to {rosSettings.host}:{rosSettings.port}
+                </div>
+              )}
+            </div>
+            {rosSettings.drones.map(drone => (
+              <div key={drone.id} className="bg-gray-800/50 rounded p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-gray-300 text-sm">{drone.name}</h4>
+                  <button
+                    onClick={() => handleDroneConnect(drone.id)}
+                    className={`px-3 py-1 rounded text-xs ${drone.connected ? 'bg-red-600' : 'bg-green-600'}`}
                   >
-                    {timeSettings.isActive ? 'Stop Timer' : 'Start Timer'}
-                  </Button>
-                  
-                  <Button
-                    onClick={() => handleTimeInputChange('currentFlightTime', 0)}
-                    variant="outline"
-                  >
-                    Reset Timer
-                  </Button>
+                    {drone.connected ? 'Disconnect' : 'Connect'}
+                  </button>
                 </div>
               </div>
+            ))}
+            <div className="mt-6 border-t pt-4">
+              <Button
+                onClick={() => handleSaveSettings('ros')}
+                className={`w-full ${unsavedChanges.ros ? 'bg-blue-600 animate-pulse' : 'bg-green-600'}`}
+                disabled={!unsavedChanges.ros}
+              >
+                {unsavedChanges.ros ? 'Save ROS Settings' : 'ROS Settings Saved'}
+              </Button>
             </div>
-             <div className="mt-6 pt-4 border-t border-gray-700">
-        <Button
-          onClick={() => handleSaveSettings('time')}
-          className={`w-full transition-all duration-300 ${
-                unsavedChanges.time 
-                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
-                  : 'bg-green-600 hover:bg-green-700'
-              }`}
-              disabled={!unsavedChanges.time}
-            >
-              {unsavedChanges.time ? 'Save Time Settings' : 'Time Settings Saved'}
-            </Button>
-            
-            {unsavedChanges.time && (
-              <p className="text-xs text-yellow-400 mt-2 text-center">
-                You have unsaved time changes
-              </p>
-            )}
-          </div>
-          </div>
-          );
-     
-      case 'reset':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-blue-400 mb-4">Reset Statistics</h3>
-              
-              <div className="bg-gray-800/50 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-gray-300 mb-3">System Reset Options</h4>
-                <p className="text-gray-400 text-sm mb-4">
-                  This will reset all statistics, flight times, and mission data to their default values.
-                </p>
-                
-                <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-4">
-                  <p className="text-red-400 text-sm">
-                    ⚠️ Warning: This action cannot be undone. All current mission data and statistics will be lost.
-                  </p>
-                </div>
-
-                <Button
-                  onClick={handleResetStats}
-                  variant="destructive"
-                  className="w-full"
-                >
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                  Reset All Statistics
-                </Button>
-              </div>
-            </div>
-          </div>);
-          
-          {/* Save Button for Reset Tab */}
-          <div className="mt-6 pt-4 border-t border-gray-700">
-            <Button
-              onClick={() => handleSaveSettings('reset')}
-              className={`w-full transition-all duration-300 ${
-                unsavedChanges.reset 
-                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
-                  : 'bg-green-600 hover:bg-green-700'
-              }`}
-              disabled={!unsavedChanges.reset}
-            >
-              {unsavedChanges.reset ? 'Save Reset Settings' : 'Reset Settings Saved'}
-            </Button>
-            
-            {unsavedChanges.reset && (
-              <p className="text-xs text-yellow-400 mt-2 text-center">
-                You have unsaved reset changes
-              </p>
-            )}
-          </div>
-      
-
-      case 'power':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-blue-400 mb-4">Power Management</h3>
-              
-              <div className="bg-gray-800/50 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-gray-300 mb-3">System Power Options</h4>
-                <p className="text-gray-400 text-sm mb-4">
-                  Manage system power settings and drone battery monitoring.
-                </p>
-                
-                <div className="space-y-3">
-                  <Button variant="outline" className="w-full justify-start">
-                    Low Battery Alert Threshold: 20%
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    Auto-Return on Low Battery: Enabled
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    Emergency Landing: Armed
-                  </Button>
-                </div>
-              </div>
-            </div>
-                   <div className="mt-6 pt-4 border-t border-gray-700">
-            <Button
-              onClick={() => handleSaveSettings('power')}
-              className={`w-full transition-all duration-300 ${
-                unsavedChanges.power 
-                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
-                  : 'bg-green-600 hover:bg-green-700'
-              }`}
-              disabled={!unsavedChanges.power}
-            >
-              {unsavedChanges.power ? 'Save Power Settings' : 'Power Settings Saved'}
-            </Button>
-            
-            {unsavedChanges.power && (
-              <p className="text-xs text-yellow-400 mt-2 text-center">
-                You have unsaved power changes
-              </p>
-            )}
-          </div>
-        
           </div>
         );
 
-      case 'general':
+      case 'time':
+        const { maxFlightTime, currentFlightTime, isActive } = timeSettings;
+        const pct = Math.min((currentFlightTime / (maxFlightTime * 60)) * 100, 100);
         return (
           <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-blue-400 mb-4">General Settings</h3>
-              
-              <div className="bg-gray-800/50 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-gray-300 mb-3">Application Settings</h4>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Dark Mode</span>
-                    <button className="w-12 h-6 bg-blue-600 rounded-full relative">
-                      <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 transition-all"></div>
-                    </button>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Sound Alerts</span>
-                    <button className="w-12 h-6 bg-blue-600 rounded-full relative">
-                      <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 transition-all"></div>
-                    </button>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Auto-Save Mission Data</span>
-                    <button className="w-12 h-6 bg-blue-600 rounded-full relative">
-                      <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 transition-all"></div>
-                    </button>
-                  </div>
-                </div>
+            <h3 className="text-lg font-semibold text-blue-400">Flight Time Management</h3>
+            <div className="bg-gray-800/50 rounded p-4">
+              <label className="text-xs text-gray-400">Maximum Flight Time (minutes)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                max="120"
+                value={maxFlightTime}
+                onChange={e => handleTimeInputChange('maxFlightTime', parseFloat(e.target.value) || 0)}
+                className="w-full bg-gray-700 text-white rounded px-3 py-2"
+              />
+              <div className="mt-4 text-2xl font-mono text-cyan-300">
+                {String(Math.floor(currentFlightTime / 60)).padStart(2, '0')}:
+                {String(currentFlightTime % 60).padStart(2, '0')}
+              </div>
+              <div className="w-full bg-gray-700 h-2 rounded mt-2">
+                <div className="bg-blue-500 h-2 rounded" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="flex space-x-2 mt-4">
+                <Button
+                  onClick={() => handleTimeInputChange('isActive', !isActive)}
+                  className={isActive ? 'bg-red-600' : 'bg-green-600'}
+                >
+                  {isActive ? 'Stop Timer' : 'Start Timer'}
+                </Button>
+                <Button variant="outline" onClick={() => handleTimeInputChange('currentFlightTime', 0)}>
+                  Reset Timer
+                </Button>
               </div>
             </div>
-              <div className="mt-6 pt-4 border-t border-gray-700">
-            <Button
-              onClick={() => handleSaveSettings('general')}
-              className={`w-full transition-all duration-300 ${
-                unsavedChanges.general 
-                  ? 'bg-blue-600 hover:bg-blue-700 animate-pulse' 
-                  : 'bg-green-600 hover:bg-green-700'
-              }`}
-              disabled={!unsavedChanges.general}
-            >
-              {unsavedChanges.general ? 'Save General Settings' : 'General Settings Saved'}
-            </Button>
-            
-            {unsavedChanges.general && (
-              <p className="text-xs text-yellow-400 mt-2 text-center">
-                You have unsaved general changes
-              </p>
-            )}
+            <div className="mt-6 border-t pt-4">
+              <Button
+                onClick={() => handleSaveSettings('time')}
+                className={`w-full ${unsavedChanges.time ? 'bg-blue-600 animate-pulse' : 'bg-green-600'}`}
+                disabled={!unsavedChanges.time}
+              >
+                {unsavedChanges.time ? 'Save Time Settings' : 'Time Settings Saved'}
+              </Button>
+              {unsavedChanges.time && <p className="text-xs text-yellow-400 mt-2">Unsaved time changes</p>}
+            </div>
           </div>
-       
-          </div>
-          
-          );
-        
+        );
 
-     case 'default':
+      case 'reset':
+        return (
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-blue-400">Reset Statistics</h3>
+            <div className="bg-gray-800/50 rounded p-4 text-gray-400">
+              <p>This will reset flight statistics and mission data to default.</p>
+              <div className="bg-red-900/20 border border-red-800 rounded p-3 my-4">
+                ⚠️ Warning: This action cannot be undone.
+              </div>
+              <Button onClick={handleResetStats} variant="destructive" className="w-full">
+                <RotateCcw className="w-4 h-4 mr-2" /> Reset All Statistics
+              </Button>
+            </div>
+          </div>
+        );
+
+      default:
         return null;
     }
   };
 
   return (
     <div className="relative">
+      {/* Header */}
       <header className="bg-gray-900/80 backdrop-blur-sm border-b border-gray-700/50 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-8">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className={`p-3 border border-gray-600 rounded-lg transition-all duration-200 hover:border-gray-500 ${
-                  showSettings ? 'bg-blue-600/20 border-blue-600/30' : 'bg-gray-800/50 hover:bg-gray-700/50'
-                }`}
-              >
-                <Settings className={`w-5 h-5 transition-colors ${
-                  showSettings ? 'text-blue-400' : 'text-gray-300 hover:text-white'
-                }`} />
-              </button>
-              
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
-                 Yantramanav Mission Control 
-                </h1>
-                <p className="text-gray-400 text-sm font-medium">Search and Rescue Operations</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-6">
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-green-400 font-medium">OPERATIONAL</span>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Wifi className="w-4 h-4 text-green-400" />
-                <span className="text-green-400 font-medium">CONNECTED</span>
-              </div>
+            <button onClick={() => setShowSettings(!showSettings)} className="p-3 border border-gray-600 rounded-lg">
+              <SettingsIcon className="w-5 h-5 text-gray-300 hover:text-white" />
+            </button>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+                Yantramanav Mission Control
+              </h1>
+              <p className="text-gray-400 text-sm">Search and Rescue Operations</p>
             </div>
           </div>
-          
           <div className="text-right">
-            <div className="text-2xl font-bold font-mono text-cyan-300">
-              {currentTime.toLocaleTimeString('en-US', { 
-                hour12: false,
-                timeZoneName: 'short'
-              })}
+            <div className="text-2xl font-mono text-cyan-300">
+              {currentTime.toLocaleTimeString('en-US', { hour12: false, timeZoneName: 'short' })}
             </div>
             <div className="text-gray-400 text-sm">
-              {currentTime.toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}
+              {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
           </div>
         </div>
       </header>
 
-      {/* Settings Sidebar */}
-      <div className={`fixed top-0 left-0 h-full w-96 bg-gray-900 border-r border-gray-700 shadow-2xl transform transition-transform duration-300 ease-in-out z-50 ${
-        showSettings ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      {/* Sidebar */}
+      <div
+        className={`fixed top-0 left-0 h-full w-96 bg-gray-900 border-r border-gray-700 z-50 transition-transform duration-300 ${
+          showSettings ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="flex h-full">
-          {/* Settings Sidebar Navigation */}
-          <div className="w-24 bg-gray-800/50 border-r border-gray-700 p-4">
-            <div className="flex flex-col items-center mb-6">
-              <button
-                onClick={() => setShowSettings(false)}
-                className="p-2 hover:bg-gray-700 rounded-lg transition-colors mb-2"
-              >
-                <X className="w-5 h-5 text-gray-400 hover:text-white" />
-              </button>
-              <span className="text-xs text-gray-500 text-center">Settings</span>
-            </div>
-            
+          <div className="w-24 bg-gray-800/50 border-r p-4">
+            <button onClick={() => setShowSettings(false)} className="p-2 mb-2 hover:bg-gray-700 rounded-lg">
+              <X className="w-5 h-5 text-gray-400 hover:text-white" />
+            </button>
             <nav className="space-y-2">
-              {sidebarItems.map((item) => (
+              {sidebarItems.map(item => (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex flex-col items-center space-y-1 p-2 rounded-lg text-center transition-colors ${
+                  className={`w-full flex flex-col items-center p-2 rounded-lg transition ${
                     activeTab === item.id
                       ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
                       : 'text-gray-300 hover:bg-gray-700/50 hover:text-white'
@@ -644,25 +322,17 @@ const Header = () => {
                   title={item.label}
                 >
                   <item.icon className="w-4 h-4" />
-                  <span className="text-xs leading-tight">{item.label.split(' ')[0]}</span>
+                  <span className="text-xs">{item.label.split(' ')[0]}</span>
                 </button>
               ))}
             </nav>
           </div>
-
-          {/* Settings Content */}
-          <div className="flex-1 p-6 overflow-y-auto">
-            {renderSettingsContent()}
-          </div>
+          <div className="flex-1 p-6 overflow-y-auto">{renderSettingsContent()}</div>
         </div>
       </div>
 
-      {/* Backdrop */}
       {showSettings && (
-        <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
-          onClick={() => setShowSettings(false)}
-        />
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40" onClick={() => setShowSettings(false)} />
       )}
     </div>
   );
