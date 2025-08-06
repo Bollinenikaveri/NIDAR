@@ -1,6 +1,7 @@
 import ROSLIB, { Ros} from "roslib";
 
 import { parseKmlPolygon } from '../lib/parse-utils';
+import { se } from "date-fns/locale";
 
 class MockDataService {
   constructor() {
@@ -180,42 +181,62 @@ class MockDataService {
     return path;
   }
 
-  getKMLData(file) {
-    if (!file) {
-      // If no file is provided, return a default polygon
-      return Promise.resolve(this.getDefaultKMLPolygon());
+ async getKMLData(file) {
+  if (!file) {
+    return Promise.resolve(this.getDefaultKMLPolygon());
+  }
+
+  try {
+    // Parse KML file and extract coordinates
+    const kmlData = await parseKmlPolygon(file);
+    console.log('Parsed KML Data:', kmlData);
+
+    if (!kmlData || kmlData.length === 0) {
+      console.error("No valid coordinates found in KML file.");
+      return this.getDefaultKMLPolygon();
     }
 
-    let kmlData = parseKmlPolygon(file);
-    
-    console.log('KML Data:', kmlData);
 
-   let coordinates = kmlData;
-   console.log('KML Coordinates:', typeof coordinates
-   );
+    // Construct the request object based on the srv definition
+    const request = {
+      polygon_x: kmlData.map(coord => coord.lng),
+      polygon_y: kmlData.map(coord => coord.lat),
+      safe_margin: 1.0,
+      spacing: 1.0,
+      angle: 0.0
+    };
+    console.log("Request to ROS service:", request);
+    // Create the ROS service client
+    const pathService = new ROSLIB.Service({
+      ros: this.ros,
+      name: '/get_lawnmower_path',
+      serviceType: 'mission_interfaces/srv/GetLawnmowerPath'
+    });
 
-let request = {
-  polygon_x: coordinates.map(coord => coord.lng),
-  polygon_y: coordinates.map(coord => coord.lat),
-  safe_margin: 1.0,      // or user-defined
-  spacing: 1.0,          // or user-defined
-  angle: 0.0             // or user-defined (in degrees)
-};
+    // Call the service
+    pathService.callService(new ROSLIB.ServiceRequest(request), (result) => {
+      if (!result || !result.waypoint_x || !result.waypoint_y) {
+        console.error("Invalid response from service:", result);
+        return;
+      }
 
-let pathService = new ROSLIB.Service({
-  ros: this.ros,
-  name: '/get_lawnmower_path',
-  serviceType: 'mission_interfaces/srv/GetLawnmowerPath'
-});
+      console.log("Waypoints X:", result.waypoint_x);
+      console.log("Waypoints Y:", result.waypoint_y);
 
-pathService.callService(request, function(result) {
-  console.log("Waypoints X:", result.waypoint_x);
-  console.log("Waypoints Y:", result.waypoint_y);
-  // You can zip them or plot them on a map here
-});
+      // Optional: Combine them if needed
+      const waypoints = result.waypoint_x.map((x, i) => ({
+        lng: x,
+        lat: result.waypoint_y[i]
+      }));
 
+      console.log("Waypoints (lat, lng):", waypoints);
+    });
 
+  } catch (error) {
+    console.error("Error processing KML or calling service:", error);
   }
+}
+
   getDefaultKMLPolygon() {
     return {
       name: 'Default Search Area',
