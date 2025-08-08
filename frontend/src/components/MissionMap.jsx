@@ -1,5 +1,5 @@
 // frontend/src/components/MissionMap.jsx
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -15,38 +15,7 @@ import L from 'leaflet';
 import { Route } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 
-/**
- * MissionMap.jsx
- *
- * - React-Leaflet based mission overview map.
- * - Starts EMPTY until user uploads a KML.
- * - After upload:
- *    - parses KML (points, LineString routes, Polygon areas),
- *    - draws waypoints / routes / areas,
- *    - fits map bounds to only KML features (safely),
- *    - shows Scout, Delivery and Base markers (droneData prop drives their positions).
- * - Satellite base layer is included (Esri World Imagery by default) and user can toggle to street tiles.
- * - Defensively checks bounds validity before calling fitBounds to avoid "Bounds are not valid" errors.
- *
- * Notes:
- * - This file does NOT require leaflet-omnivore or @mapbox/togeojson. It uses an in-browser parser
- *   (parseKML) that extracts common KML geometries. This reduces dependency issues.
- * - Replace or wire real-time drone coordinates by passing `droneData` prop from parent.
- *
- * Props:
- * - droneData: {
- *     base: { lat, lng },
- *     scout: { location: { lat, lng }, battery, altitude, speed },
- *     delivery: { location: { lat, lng }, battery, payload, altitude },
- *     victim: { lat, lng } (optional)
- *   }
- * - missionActive: boolean (for A* visualization)
- * - isMainMap: boolean (controls layout/overlays)
- *
- * Drop this file into frontend/src/components and import where used.
- */
-
-/* ---------- Leaflet default marker fix (retain earlier behavior) ---------- */
+/* ---------- Leaflet default marker fix ---------- */
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
@@ -57,7 +26,7 @@ L.Icon.Default.mergeOptions({
     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-/* ---------- Custom div icons (keeps the visual language from your repo) ---------- */
+/* ---------- Custom div icons ---------- */
 const createCustomIcon = (color, svgContent) =>
   L.divIcon({
     html: `<div style="
@@ -101,131 +70,26 @@ const waypointIcon = createCustomIcon(
   '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>'
 );
 
-/* ---------- Map bounds updater (safe fitBounds call) ---------- */
+/* ---------- Map bounds updater ---------- */
 const MapBoundsUpdater = ({ bounds }) => {
   const map = useMap();
   useEffect(() => {
     if (!map || !bounds) return;
     try {
-      // If bounds is a LatLngBounds object with isValid()
       if (typeof bounds.isValid === 'function') {
         if (bounds.isValid()) {
-          // call fitBounds only when valid
           map.fitBounds(bounds, { padding: [24, 24] });
         }
       } else {
-        // If bounds provided as Array of coords, convert and fit
         const b = L.latLngBounds(bounds);
         if (b.isValid()) map.fitBounds(b, { padding: [24, 24] });
       }
     } catch (err) {
-      // Defensive: ignore invalid bounds errors
-      // console.warn('MapBoundsUpdater: fitBounds skipped due to error', err);
+      // ignore invalid bounds errors
     }
   }, [bounds, map]);
   return null;
 };
-
-/* ---------- Lightweight in-browser KML parser ----------
-   - Extracts Placemark points -> waypoints
-   - Extracts LineString -> route paths
-   - Extracts Polygon -> area coordinates
-   - Returns an object shaped for this component
-*/
-function parseKML(kmlText) {
-  const out = { fileName: '', waypoints: [], coordinates: [] };
-  if (!kmlText || typeof kmlText !== 'string') return out;
-  const dom = new DOMParser().parseFromString(kmlText, 'text/xml');
-
-  // Some KMLs use namespaces; using localName checks keeps this robust
-  const placemarks = Array.from(dom.getElementsByTagName('Placemark'));
-
-  placemarks.forEach((pm) => {
-    const nameNode = pm.getElementsByTagName('name')[0];
-    const name = nameNode && nameNode.textContent ? nameNode.textContent.trim() : '';
-
-    // Point -> waypoint
-    const point = pm.getElementsByTagName('Point')[0];
-    if (point) {
-      const coordsNode = point.getElementsByTagName('coordinates')[0];
-      if (coordsNode && coordsNode.textContent) {
-        const tokens = coordsNode.textContent.trim().split(/\s+/).filter(Boolean);
-        if (tokens.length > 0) {
-          const first = tokens[0].trim();
-          const [lngStr, latStr] = first.split(',').map((s) => s.trim());
-          const lat = parseFloat(latStr);
-          const lng = parseFloat(lngStr);
-          if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-            out.waypoints.push({ name, lat, lng });
-          }
-        }
-      }
-      return;
-    }
-
-    // LineString -> route
-    const line = pm.getElementsByTagName('LineString')[0];
-    if (line) {
-      const coordsNode = line.getElementsByTagName('coordinates')[0];
-      if (coordsNode && coordsNode.textContent) {
-        const tokens = coordsNode.textContent.trim().split(/\s+/).filter(Boolean);
-        const path = tokens
-          .map((tok) => {
-            const [lngStr, latStr] = tok.split(',').map((s) => s.trim());
-            const lat = parseFloat(latStr);
-            const lng = parseFloat(lngStr);
-            return !Number.isNaN(lat) && !Number.isNaN(lng) ? { lat, lng } : null;
-          })
-          .filter(Boolean);
-        if (path.length) out.coordinates.push({ type: 'route', path });
-      }
-      return;
-    }
-
-    // Polygon -> area
-    const polygon = pm.getElementsByTagName('Polygon')[0];
-    if (polygon) {
-      // prefer outerBoundaryIs -> LinearRing -> coordinates
-      let coordsNode = polygon.getElementsByTagName('outerBoundaryIs')[0];
-      if (coordsNode) coordsNode = coordsNode.getElementsByTagName('coordinates')[0];
-      if (!coordsNode) coordsNode = polygon.getElementsByTagName('coordinates')[0];
-
-      if (coordsNode && coordsNode.textContent) {
-        const tokens = coordsNode.textContent.trim().split(/\s+/).filter(Boolean);
-        const area = tokens
-          .map((tok) => {
-            const [lngStr, latStr] = tok.split(',').map((s) => s.trim());
-            const lat = parseFloat(latStr);
-            const lng = parseFloat(lngStr);
-            return !Number.isNaN(lat) && !Number.isNaN(lng) ? { lat, lng } : null;
-          })
-          .filter(Boolean);
-        if (area.length) out.coordinates.push({ type: 'area', area });
-      }
-      return;
-    }
-
-    // fallback: if placemark contains LineString deeper
-    const innerLine = pm.getElementsByTagName('LineString')[0];
-    if (innerLine) {
-      const coordsNode = innerLine.getElementsByTagName('coordinates')[0];
-      if (coordsNode && coordsNode.textContent) {
-        const tokens = coordsNode.textContent.trim().split(/\s+/).filter(Boolean);
-        const path = tokens
-          .map((tok) => {
-            const [lngStr, latStr] = tok.split(',').map((s) => s.trim());
-            const lat = parseFloat(latStr);
-            const lng = parseFloat(lngStr);
-            return !Number.isNaN(lat) && !Number.isNaN(lng) ? { lat, lng } : null;
-          })
-          .filter(Boolean);
-        if (path.length) out.coordinates.push({ type: 'route', path });
-      }
-    }
-  });
-
-  return out;
-}
 
 /* ---------- Utility: compute bounds from parsed KML ---------- */
 function computeBoundsFromKml(parsed) {
@@ -262,7 +126,7 @@ function computeBoundsFromKml(parsed) {
   return bounds.isValid() ? bounds : null;
 }
 
-/* ---------- A* path simulator (keeps previous behavior) ---------- */
+/* ---------- A* path simulator ---------- */
 const calculateAStarPath = (start, end) => {
   const path = [];
   if (!start || !end) return path;
@@ -278,17 +142,12 @@ const calculateAStarPath = (start, end) => {
 };
 
 /* ---------- Main component ---------- */
-const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
-  // KML parsed object: { fileName, waypoints: [...], coordinates: [...] }
-  const [kmlData, setKmlData] = useState(null);
+const MissionMap = ({ droneData, missionActive, isMainMap = false, kmlData }) => {
   const [kmlBounds, setKmlBounds] = useState(null);
-  const [kmlUploaded, setKmlUploaded] = useState(false);
   const [pathPoints, setPathPoints] = useState([]);
-  const fileInputRef = useRef(null);
 
-  // When missionActive toggles or droneData updates, recalc A* path
   useEffect(() => {
-    if (missionActive && droneData && droneData.scout && droneData.victim) {
+    if (missionActive && droneData?.scout?.location && droneData?.victim) {
       const start = droneData.scout.location;
       const end = droneData.victim;
       setPathPoints(calculateAStarPath(start, end));
@@ -297,68 +156,30 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
     }
   }, [missionActive, droneData]);
 
-  // KML file upload handler (reads as text and parses in-browser)
-  const handleKmlUpload = (ev) => {
-    const file = ev?.target?.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target.result;
-        const parsed = parseKML(text);
-        parsed.fileName = file.name || parsed.fileName;
-        setKmlData(parsed);
+  useEffect(() => {
+    const b = computeBoundsFromKml(kmlData);
+    setKmlBounds(b);
+  }, [kmlData]);
 
-        // compute bounds defensively
-        const b = computeBoundsFromKml(parsed);
-        setKmlBounds(b);
-        setKmlUploaded(true);
-      } catch (err) {
-        console.error('Failed to parse KML:', err);
-        alert('Failed to parse KML file. Ensure it is a valid KML with coordinates.');
-      }
-    };
-    reader.onerror = (err) => {
-      console.error('FileReader error', err);
-      alert('Unable to read file.');
-    };
-    reader.readAsText(file);
-  };
+  // Choose center: first waypoint -> base -> fallback to India center
+  const center =
+    (kmlData?.waypoints?.[0] && [kmlData.waypoints[0].lat, kmlData.waypoints[0].lng]) ||
+    (droneData?.base && [droneData.base.lat, droneData.base.lng]) ||
+    [20.5937, 78.9629];
 
-  // If no KML uploaded yet -> show a nice empty placeholder + upload control
-  if (!kmlUploaded) {
+  // If no KML data, show empty placeholder UI
+  if (!kmlData) {
     return (
       <div
         className={`relative rounded-lg overflow-hidden ${
           isMainMap ? 'h-full' : 'h-[calc(100%-2rem)] bg-gray-900/50 p-3 rounded-xl'
         }`}
       >
-        {isMainMap && (
-          <div className="absolute top-4 left-4 z-10">
-            <input
-              type="file"
-              accept=".kml"
-              ref={fileInputRef}
-              onChange={handleKmlUpload}
-              className="p-2 bg-white/90 rounded-md text-sm"
-            />
-          </div>
-        )}
-
         <div className="flex items-center justify-center h-full text-gray-400">
           <div className="text-center">
             <div className="mb-2 text-sm font-medium">Mission map is empty</div>
-            <div className="text-xs">Upload a KML to display waypoints, areas and routes — drone markers will appear after upload.</div>
-            <div className="mt-4">
-              <button
-                onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                className="px-3 py-1 bg-cyan-600 text-white rounded-md text-sm"
-              >
-                Upload KML
-              </button>
-            </div>
-            <div className="mt-3 text-xs text-gray-500">
-              Satellite view available after upload — try an area KML or route KML.
+            <div className="text-xs">
+              Upload a KML to display waypoints, areas and routes — drone markers will appear after upload.
             </div>
           </div>
         </div>
@@ -366,36 +187,16 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
     );
   }
 
-  /* ---------- KML uploaded: build the map ---------- */
-  // Choose center: first waypoint -> base -> fallback to India center
-  const center =
-    (kmlData?.waypoints?.[0] && [kmlData.waypoints[0].lat, kmlData.waypoints[0].lng]) ||
-    (droneData?.base && [droneData.base.lat, droneData.base.lng]) ||
-    [20.5937, 78.9629];
-
   return (
     <div
       className={`relative rounded-lg overflow-hidden ${
         isMainMap ? 'h-full' : 'h-[calc(100%-2rem)] bg-gray-900/50 p-3 rounded-xl'
       }`}
     >
-      {/* file input remains available so user can replace KML */}
-      {isMainMap && (
-        <input
-          type="file"
-          accept=".kml"
-          ref={fileInputRef}
-          onChange={handleKmlUpload}
-          className="absolute top-4 left-4 z-10 bg-white bg-opacity-80 p-2 rounded-md text-sm"
-        />
-      )}
-
       <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%' }}>
-        {/* LayersControl with Satellite & Streets - Satellite is DEFAULT (checked) */}
         <LayersControl position="topright">
           <LayersControl.BaseLayer checked name="Satellite">
             <TileLayer
-              // Esri World Imagery (satellite) — good quality and free for many use cases
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
               attribution="Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping"
               maxZoom={20}
@@ -412,27 +213,27 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
             />
           </LayersControl.BaseLayer>
 
-          {/* Group for KML-derived geometry so user can toggle it */}
           <LayersControl.Overlay checked name="Mission KML">
             <LayerGroup>
-              {/* Fit map to KML bounds ONLY (MapBoundsUpdater checks validity) */}
               {kmlBounds && <MapBoundsUpdater bounds={kmlBounds} />}
 
-              {/* KML Waypoints */}
-              {kmlData?.waypoints?.map((w, i) => (
+              {/* Waypoints */}
+              {kmlData.waypoints?.map((w, i) => (
                 <Marker key={`kml-wp-${i}`} position={[w.lat, w.lng]} icon={waypointIcon}>
                   <Popup>
                     <div className="text-center">
                       <strong>{w.name || `Waypoint ${i + 1}`}</strong>
                       <br />
-                      <span className="text-xs text-gray-600">{w.lat.toFixed(6)}, {w.lng.toFixed(6)}</span>
+                      <span className="text-xs text-gray-600">
+                        {w.lat.toFixed(6)}, {w.lng.toFixed(6)}
+                      </span>
                     </div>
                   </Popup>
                 </Marker>
               ))}
 
-              {/* KML areas & routes */}
-              {kmlData?.coordinates?.map((item, idx) => {
+              {/* Areas and routes */}
+              {kmlData.coordinates?.map((item, idx) => {
                 if (item.type === 'area' && item.area) {
                   const positions = item.area.map((p) => [p.lat, p.lng]);
                   return (
@@ -468,54 +269,63 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
             </LayerGroup>
           </LayersControl.Overlay>
 
-          {/* Drone markers overlay so user can toggle them */}
           <LayersControl.Overlay checked name="Drone Markers">
             <LayerGroup>
-              {/* Base station */}
               {droneData?.base && (
                 <Marker position={[droneData.base.lat, droneData.base.lng]} icon={baseIcon}>
                   <Popup>
                     <div className="text-center">
                       <strong>Base Station</strong>
                       <br />
-                      <span className="text-xs text-gray-600">{droneData.base.lat.toFixed(6)}, {droneData.base.lng.toFixed(6)}</span>
+                      <span className="text-xs text-gray-600">
+                        {droneData.base.lat.toFixed(6)}, {droneData.base.lng.toFixed(6)}
+                      </span>
                     </div>
                   </Popup>
                 </Marker>
               )}
 
-              {/* Scout */}
               {droneData?.scout?.location && (
                 <Marker position={[droneData.scout.location.lat, droneData.scout.location.lng]} icon={scoutIcon}>
                   <Popup>
                     <div className="text-center">
-                      <strong>Scout Drone</strong><br />
-                      <span className="text-sm">Battery: {droneData.scout.battery ?? 'N/A'}%</span><br />
-                      <span className="text-xs text-gray-600">{droneData.scout.location.lat.toFixed(6)}, {droneData.scout.location.lng.toFixed(6)}</span>
+                      <strong>Scout Drone</strong>
+                      <br />
+                      <span className="text-sm">Battery: {droneData.scout.battery ?? 'N/A'}%</span>
+                      <br />
+                      <span className="text-xs text-gray-600">
+                        {droneData.scout.location.lat.toFixed(6)}, {droneData.scout.location.lng.toFixed(6)}
+                      </span>
                     </div>
                   </Popup>
                 </Marker>
               )}
 
-              {/* Delivery */}
               {droneData?.delivery?.location && (
                 <Marker position={[droneData.delivery.location.lat, droneData.delivery.location.lng]} icon={deliveryIcon}>
                   <Popup>
                     <div className="text-center">
-                      <strong>Delivery Drone</strong><br />
-                      <span className="text-sm">Battery: {droneData.delivery.battery ?? 'N/A'}%</span><br />
-                      <span className="text-xs text-gray-600">{droneData.delivery.location.lat.toFixed(6)}, {droneData.delivery.location.lng.toFixed(6)}</span>
+                      <strong>Delivery Drone</strong>
+                      <br />
+                      <span className="text-sm">Battery: {droneData.delivery.battery ?? 'N/A'}%</span>
+                      <br />
+                      <span className="text-xs text-gray-600">
+                        {droneData.delivery.location.lat.toFixed(6)}, {droneData.delivery.location.lng.toFixed(6)}
+                      </span>
                     </div>
                   </Popup>
                 </Marker>
               )}
 
-              {/* Victim (if exists) */}
               {droneData?.victim && (
                 <Marker position={[droneData.victim.lat, droneData.victim.lng]} icon={victimIcon}>
                   <Popup>
-                    <div className="text-center"><strong>Victim</strong><br />
-                      <span className="text-xs text-gray-600">{droneData.victim.lat.toFixed(6)}, {droneData.victim.lng.toFixed(6)}</span>
+                    <div className="text-center">
+                      <strong>Victim</strong>
+                      <br />
+                      <span className="text-xs text-gray-600">
+                        {droneData.victim.lat.toFixed(6)}, {droneData.victim.lng.toFixed(6)}
+                      </span>
                     </div>
                   </Popup>
                 </Marker>
@@ -524,20 +334,20 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false }) => {
           </LayersControl.Overlay>
         </LayersControl>
 
-        {/* A* simulated path line */}
         {missionActive && pathPoints.length > 1 && (
           <Polyline positions={pathPoints} color="#60a5fa" weight={3} opacity={0.85} dashArray="10,10" />
         )}
       </MapContainer>
 
-      {/* Overlays on top of the map (UI elements) */}
       {isMainMap && kmlData && (
         <div className="absolute top-4 right-4 bg-cyan-900/90 backdrop-blur-sm rounded-lg p-3 z-10">
           <div className="flex items-center text-cyan-400">
             <Route className="w-4 h-4 mr-2" />
             <div>
               <div className="text-sm font-semibold">{kmlData.fileName || 'KML File'}</div>
-              <div className="text-xs text-cyan-300">{kmlData.waypoints?.length || 0} waypoints • {kmlData.coordinates?.length || 0} features</div>
+              <div className="text-xs text-cyan-300">
+                {kmlData.waypoints?.length || 0} waypoints • {kmlData.coordinates?.length || 0} features
+              </div>
             </div>
           </div>
         </div>
