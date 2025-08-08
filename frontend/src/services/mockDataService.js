@@ -182,72 +182,96 @@ class MockDataService {
   }
 
  async getKMLData(file) {
-  if (!file) {
-    return Promise.resolve(this.getDefaultKMLPolygon());
-  }
-
-  try {
-    // Parse KML file and extract coordinates
-    const kmlData = await parseKmlPolygon(file);
-    console.log('Parsed KML Data:', kmlData);
-
-    if (!kmlData || kmlData.length === 0) {
-      console.error("No valid coordinates found in KML file.");
-      return this.getDefaultKMLPolygon();
+    if (!file) {
+      return Promise.resolve(this.getDefaultKMLData());
     }
 
+    try {
+      // Parse KML file and extract coordinates
+      const kmlData = await parseKmlPolygon(file);
+      console.log('Parsed KML Data:', kmlData);
 
-    // Construct the request object based on the srv definition
-    const request = {
-      polygon_x: kmlData.map(coord => coord.lng),
-      polygon_y: kmlData.map(coord => coord.lat),
-      safe_margin: 1.0,
-      spacing: 1.0,
-      angle: 0.0
-    };
-    console.log("Request to ROS service:", request);
-    // Create the ROS service client
-    const pathService = new ROSLIB.Service({
-      ros: this.ros,
-      name: '/get_lawnmower_path',
-      serviceType: 'mission_interfaces/srv/GetLawnmowerPath'
-    });
-
-    // Call the service
-    pathService.callService(new ROSLIB.ServiceRequest(request), (result) => {
-      if (!result || !result.waypoint_x || !result.waypoint_y) {
-        console.error("Invalid response from service:", result);
-        return;
+      if (!kmlData || kmlData.length === 0) {
+        console.error("No valid coordinates found in KML file.");
+        return this.getDefaultKMLData();
       }
 
-      console.log("Waypoints X:", result.waypoint_x);
-      console.log("Waypoints Y:", result.waypoint_y);
+      // Convert parsed coordinates to the expected format
+      const processedData = {
+        fileName: file.name,
+        waypoints: kmlData.map((coord, index) => ({
+          name: `Waypoint ${index + 1}`,
+          lat: coord.lat,
+          lng: coord.lng
+        })),
+        coordinates: [{
+          type: 'area',
+          area: kmlData
+        }]
+      };
 
-      // Optional: Combine them if needed
-      const waypoints = result.waypoint_x.map((x, i) => ({
-        lng: x,
-        lat: result.waypoint_y[i]
-      }));
+      // Construct the request object based on the srv definition
+      const request = {
+        polygon_x: kmlData.map(coord => coord.lng),
+        polygon_y: kmlData.map(coord => coord.lat),
+        safe_margin: 1.0,
+        spacing: 1.0,
+        angle: 0.0
+      };
+      console.log("Request to ROS service:", request);
+      
+      // Create the ROS service client
+      const pathService = new ROSLIB.Service({
+        ros: this.ros,
+        name: '/get_lawnmower_path',
+        serviceType: 'mission_interfaces/srv/GetLawnmowerPath'
+      });
 
-      console.log("Waypoints (lat, lng):", waypoints);
-    });
+      // Call the service
+      pathService.callService(new ROSLIB.ServiceRequest(request), (result) => {
+        if (!result || !result.waypoint_x || !result.waypoint_y) {
+          console.error("Invalid response from service:", result);
+          return;
+        }
 
-  } catch (error) {
-    console.error("Error processing KML or calling service:", error);
+        console.log("Waypoints X:", result.waypoint_x);
+        console.log("Waypoints Y:", result.waypoint_y);
+
+        // Optional: Combine them if needed
+        const waypoints = result.waypoint_x.map((x, i) => ({
+          lng: x,
+          lat: result.waypoint_y[i]
+        }));
+
+        console.log("Waypoints (lat, lng):", waypoints);
+      });
+
+      return processedData;
+
+    } catch (error) {
+      console.error("Error processing KML or calling service:", error);
+      return this.getDefaultKMLData();
+    }
   }
-}
 
-  getDefaultKMLPolygon() {
+  getDefaultKMLData() {
     return {
-      name: 'Default Search Area',
-      coordinates: [
-        [this.baseLocation.lng - 0.01, this.baseLocation.lat - 0.01],
-        [this.baseLocation.lng + 0.01, this.baseLocation.lat - 0.01],
-        [this.baseLocation.lng + 0.01, this.baseLocation.lat + 0.01],
-        [this.baseLocation.lng - 0.01, this.baseLocation.lat + 0.01]      
-
-  
-      ]
+      fileName: 'Default Search Area',
+      waypoints: [
+        { name: 'Point 1', lat: this.baseLocation.lat - 0.01, lng: this.baseLocation.lng - 0.01 },
+        { name: 'Point 2', lat: this.baseLocation.lat - 0.01, lng: this.baseLocation.lng + 0.01 },
+        { name: 'Point 3', lat: this.baseLocation.lat + 0.01, lng: this.baseLocation.lng + 0.01 },
+        { name: 'Point 4', lat: this.baseLocation.lat + 0.01, lng: this.baseLocation.lng - 0.01 }
+      ],
+      coordinates: [{
+        type: 'area',
+        area: [
+          { lat: this.baseLocation.lat - 0.01, lng: this.baseLocation.lng - 0.01 },
+          { lat: this.baseLocation.lat - 0.01, lng: this.baseLocation.lng + 0.01 },
+          { lat: this.baseLocation.lat + 0.01, lng: this.baseLocation.lng + 0.01 },
+          { lat: this.baseLocation.lat + 0.01, lng: this.baseLocation.lng - 0.01 }
+        ]
+      }]
     };
   }
 }
