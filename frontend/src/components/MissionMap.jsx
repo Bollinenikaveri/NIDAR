@@ -14,6 +14,7 @@ import {
 import L from 'leaflet';
 import { Route } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
+import { add } from 'date-fns';
 
 /* ---------- Leaflet default marker fix ---------- */
 delete L.Icon.Default.prototype._getIconUrl;
@@ -91,6 +92,20 @@ const MapBoundsUpdater = ({ bounds }) => {
   return null;
 };
 
+/* ---------- Map icon updater ---------- */
+const MapIconUpdater = ({ icon, position }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !icon || !position) return;
+    const marker = L.marker(position, { icon });
+    marker.addTo(map);
+    return () => {
+      map.removeLayer(marker);
+    };
+  }, [icon, position, map]);
+  return null;
+};
+
 /* ---------- Utility: compute bounds from parsed KML ---------- */
 function computeBoundsFromKml(parsed) {
   const bounds = L.latLngBounds([]);
@@ -116,7 +131,7 @@ function computeBoundsFromKml(parsed) {
       if (item.type === 'route' && Array.isArray(item.path)) {
         item.path.forEach((pt) => {
           if (pt && typeof pt.lat === 'number' && typeof pt.lng === 'number') {
-            bounds.extend([pt.lat, pt.lng]);
+            bounds.extend([pt.lat, pt.lng]); 
           }
         });
       }
@@ -147,6 +162,7 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false, kmlData }) =>
   const [pathPoints, setPathPoints] = useState([]);
 
   useEffect(() => {
+    
     if (missionActive && droneData?.scout?.location && droneData?.victim) {
       const start = droneData.scout.location;
       const end = droneData.victim;
@@ -159,6 +175,7 @@ const MissionMap = ({ droneData, missionActive, isMainMap = false, kmlData }) =>
   useEffect(() => {
     const b = computeBoundsFromKml(kmlData);
     setKmlBounds(b);
+   
   }, [kmlData]);
 
   // Choose center: first waypoint -> base -> fallback to India center
