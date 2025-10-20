@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Broadcaster</title>
+</head>
+<body>
+  <h2>Broadcaster (Laptop Webcam)</h2>
+  <video id="video" autoplay playsinline muted style="width:480px; background:#000;"></video>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io("http://localhost:5000");
+    const video = document.getElementById("video");
+    let pc = null;
+
+    async function startBroadcast() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = stream;
+
+      pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) socket.emit("ice-candidate", e.candidate);
+      };
+
+      socket.on("viewer-joined", async () => {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("offer", offer);
+        console.log("Offer sent");
+      });
+
+      socket.on("answer", async (answer) => {
+        try {
+          await pc.setRemoteDescription({ type: answer.type, sdp: answer.sdp });
+          console.log("Viewer connected");
+        } catch (err) {
+          console.error("Error setting remote description", err);
+        }
+      });
+    }
+
+    startBroadcast();
+  </script>
+</body>
+</html>
