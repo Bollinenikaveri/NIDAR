@@ -252,7 +252,7 @@ const MissionControlCard = ({
           </div>
         )}
 
-        {/* Quick Stats Summary */}
+        {/* Quick Stats Summary
         <div className="bg-gray-800/50 rounded-lg p-3">
           <h4 className="text-sm font-semibold text-blue-400 mb-3">Mission Summary</h4>
           <div className="grid grid-cols-2 gap-4 text-xs">
@@ -273,7 +273,7 @@ const MissionControlCard = ({
               <span className="text-cyan-300 font-semibold">{droneData.eta} min</span>
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

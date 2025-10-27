@@ -2,13 +2,55 @@ import ROSLIB, { Ros} from "roslib";
 
 import { parseKmlPolygon } from '../lib/parse-utils';
 import  useStore from "../store/store.js";
+import { tr } from "date-fns/locale";
 
 class MockDataService {
   constructor() {
-    this.store = useStore.getState();
-    // Initialize ROS connection URL from store or default to localhost
-    this.url = this.store.rosUrl.host && this.store.rosUrl.port 
-      ? `ws://${this.store.rosUrl.host}:${this.store.rosUrl.port}` 
+    // Access store via getter so we always get latest state
+    this.getStore = () => useStore.getState();
+
+    // If user has older persisted settings in localStorage, migrate them into zustand store
+    try {
+      const saved = localStorage.getItem('nidarSettings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // migrate rosSettings, timeSettings, videoSettings, globalConnectionStatus if present
+        if (parsed.rosSettings && this.getStore().setRosSettings) {
+          useStore.getState().setRosSettings(parsed.rosSettings);
+        }
+        if (parsed.timeSettings && this.getStore().setTimeSettings) {
+          useStore.getState().setTimeSettings(parsed.timeSettings);
+        }
+        if (parsed.videoSettings && this.getStore().setVideoSettings) {
+          useStore.getState().setVideoSettings(parsed.videoSettings);
+        }
+        if (typeof parsed.globalConnectionStatus !== 'undefined' && this.getStore().setGlobalConnectionStatus) {
+          useStore.getState().setGlobalConnectionStatus(parsed.globalConnectionStatus);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to migrate settings from localStorage to store:', e);
+    }
+    this.baseLocation = { lat: 37.7749, lng: -122.4194 }; // San Francisco
+    this.victimLocation = { lat: 37.7849, lng: -122.4094 };
+    this.currentDroneLocation = { lat: 37.7749, lng: -122.4194 };
+    this.alertTypes = [
+      'Victim Detected',
+      'Kit Delivered',
+      'Low Battery Warning',
+      'Communication Lost',
+      'Weather Alert',
+      'Obstacle Detected',
+      'Mission Complete',
+      'GPS Signal Weak'
+    ];
+  }
+
+  connectRos() {
+        // Initialize ROS connection URL from store or default to localhost
+    const st = this.getStore();
+    this.url = st.rosUrl && st.rosUrl.host && st.rosUrl.port
+      ? `ws://${st.rosUrl.host}:${st.rosUrl.port}`
       : 'ws://localhost:9090';
         // Initialize ROS connection
     this.ros = new Ros({
@@ -22,9 +64,9 @@ class MockDataService {
     });
     this.ros.on('close', () => {
       console.log('Connection to ROS closed');
+      
     });
-
-
+    
     // // Intialize Base Station and Drone Locations
     // this.baseStationLocation = new ROSLIB.Service({
     //   ros: this.ros,
@@ -63,22 +105,13 @@ class MockDataService {
     //   name: '/current_delivery_drone/location',
     //   serviceType: 'geographic_msgs/GeoPoint'
     // }).callService();
-    
-
-  
-    this.baseLocation = { lat: 37.7749, lng: -122.4194 }; // San Francisco
-    this.victimLocation = { lat: 37.7849, lng: -122.4094 };
-    this.currentDroneLocation = { lat: 37.7749, lng: -122.4194 };
-    this.alertTypes = [
-      'Victim Detected',
-      'Kit Delivered',
-      'Low Battery Warning',
-      'Communication Lost',
-      'Weather Alert',
-      'Obstacle Detected',
-      'Mission Complete',
-      'GPS Signal Weak'
-    ];
+ return true;
+  }
+   disconnectRos() {
+    if (this.ros) {
+      this.ros.close();
+      console.log('Disconnected from ROS');
+    }
   }
 
   getMissionData() {
@@ -97,10 +130,10 @@ class MockDataService {
   }
 
   getDroneData() {
-    // Simulate drone movement towards victim
-    const noise = () => (Math.random() - 0.5) * 0.001; // Small random movement
-    
-    return {
+
+    const noise = () => (Math.random() - 0.5) * 0.001; 
+
+   let data = {
       scout: {
         id: 'SCOUT-01',
         location: {
@@ -133,6 +166,7 @@ class MockDataService {
       totalDistance: Math.floor(Math.random() * 5) + 12,
       eta: Math.floor(Math.random() * 10) + 5
     };
+    return data;
   }
 
   getAlerts() {
@@ -186,9 +220,7 @@ class MockDataService {
     if (!file) {
       return Promise.resolve(this.getDefaultKMLData());
     }
-
-    try {
-      // Parse KML file and extract coordinates
+    try {      // Parse KML file and extract coordinates
       const kmlData = await parseKmlPolygon(file);
       console.log('Parsed KML Data:', kmlData);
 

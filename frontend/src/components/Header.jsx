@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import {
   Wifi,
   Settings as SettingsIcon,
@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { toast } from 'sonner';
+import useStore from '@/store/store';
+import {mockDataService} from '@/services/mockDataService';
 
 const Header = ({ onMaxFlightTimeChange }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -21,39 +23,43 @@ const Header = ({ onMaxFlightTimeChange }) => {
     reset: false,
   });
 
-  const [rosSettings, setRosSettings] = useState({
-    host: 'localhost',
-    port: '9090',
-    connected: false,
-    drones: [
-      { id: 'scout', name: 'Scout Drone', connected: false, topics: [] },
-      { id: 'delivery', name: 'Delivery Drone', connected: false, topics: [] }
-    ],
-    globalTopics: []
-  });
-
-  const [timeSettings, setTimeSettings] = useState({
-    maxFlightTime: 30, // minutes
-    currentFlightTime: 0,
-    isActive: false
-  });
-
-  const [videoSettings, setVideoSettings] = useState({
-    scoutDrone: {
-      host: 'localhost',
-      port: '8080',
-      streamUrl: '/video/scout',
-      connected: false
-    },
-    deliveryDrone: {
-      host: 'localhost',
-      port: '8081',
-      streamUrl: '/video/delivery',
-      connected: false
+  const [rosSettings, setRosSettings] = useState(
+    useStore.getState().rosSettings ?? {
+      host: useStore.getState().rosUrl.host,
+      port: useStore.getState().rosUrl.port,
+      connected: false,
+      drones: [
+        { id: 'scout', name: 'Scout Drone', connected: false, topics: [] },
+        { id: 'delivery', name: 'Delivery Drone', connected: false, topics: [] }
+      ],
+      globalTopics: []
     }
-  });
+  );
 
-  const [globalConnectionStatus, setGlobalConnectionStatus] = useState(false);
+  const [timeSettings, setTimeSettings] = useState(
+    useStore.getState().timeSettings ?? { maxFlightTime: 30, currentFlightTime: 0, isActive: false }
+  );
+
+  const [videoSettings, setVideoSettings] = useState(
+    useStore.getState().videoSettings ?? {
+      scoutDrone: {
+        host: useStore.getState().videoScoutStreamUrl.host,
+        port: useStore.getState().videoScoutStreamUrl.port,
+        streamUrl: useStore.getState().videoScoutStreamUrl.path,
+        connected: false
+      },
+      deliveryDrone: {
+        host: useStore.getState().videoDeliveryStreamUrl.host,
+        port: useStore.getState().videoDeliveryStreamUrl.port,
+        streamUrl: useStore.getState().videoDeliveryStreamUrl.path,
+        connected: false
+      }
+    }
+  );
+
+  const [globalConnectionStatus, setGlobalConnectionStatus] = useState(
+    useStore.getState().globalConnectionStatus ?? false
+  );
 
   const sidebarItems = [
     { id: 'ros', label: 'ROS2 Communications', icon: Radio },
@@ -68,26 +74,36 @@ const Header = ({ onMaxFlightTimeChange }) => {
     return () => clearInterval(timer);
   }, []);
 
-  // Load saved settings
+  // Load saved settings from zustand store (migrated from localStorage)
   useEffect(() => {
-    const saved = localStorage.getItem('nidarSettings');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.rosSettings) setRosSettings(parsed.rosSettings);
-        if (parsed.timeSettings) setTimeSettings(parsed.timeSettings);
-        if (parsed.videoSettings) setVideoSettings(parsed.videoSettings);
-        if (parsed.globalConnectionStatus) setGlobalConnectionStatus(parsed.globalConnectionStatus);
+    const storeState = useStore.getState();
+    if (storeState.rosSettings) setRosSettings(storeState.rosSettings);
+    if (storeState.timeSettings) setTimeSettings(storeState.timeSettings);
+    if (storeState.videoSettings) setVideoSettings(storeState.videoSettings);
+    if (typeof storeState.globalConnectionStatus !== 'undefined') setGlobalConnectionStatus(storeState.globalConnectionStatus);
 
-        // Emit max flight time on load
-        if (parsed.timeSettings && onMaxFlightTimeChange) {
-          onMaxFlightTimeChange(parsed.timeSettings.maxFlightTime);
-        }
-      } catch (e) {
-        console.error('Load settings error', e);
-      }
+    // Emit max flight time on load
+    if (storeState.timeSettings && onMaxFlightTimeChange) {
+      onMaxFlightTimeChange(storeState.timeSettings.maxFlightTime);
     }
   }, [onMaxFlightTimeChange]);
+
+  // Helper: persist current store-backed settings to localStorage for backward compatibility
+  const persistSettingsToLocal = () => {
+    try {
+      const s = useStore.getState();
+      const payload = {
+        rosSettings: s.rosSettings,
+        timeSettings: s.timeSettings,
+        videoSettings: s.videoSettings,
+        globalConnectionStatus: s.globalConnectionStatus,
+        savedAt: new Date().toISOString()
+      };
+      localStorage.setItem('nidarSettings', JSON.stringify(payload));
+    } catch (e) {
+      console.warn('Failed to persist settings to localStorage', e);
+    }
+  };
 
   // Flight timer logic—increment every second when active
   useEffect(() => {
@@ -117,10 +133,13 @@ const Header = ({ onMaxFlightTimeChange }) => {
 
   const handleSaveSettings = tab => {
     try {
-      localStorage.setItem(
-        'nidarSettings',
-        JSON.stringify({ rosSettings, timeSettings, videoSettings, globalConnectionStatus, savedAt: new Date().toISOString() })
-      );
+      // Persist to zustand store instead of localStorage
+      useStore.getState().setRosSettings(rosSettings);
+      useStore.getState().setTimeSettings(timeSettings);
+      useStore.getState().setVideoSettings(videoSettings);
+      useStore.getState().setGlobalConnectionStatus(globalConnectionStatus);
+  // Also write to localStorage for backward compatibility
+  persistSettingsToLocal();
       setUnsavedChanges(prev => ({ ...prev, [tab]: false }));
       toast.success(`${tab.charAt(0).toUpperCase() + tab.slice(1)} settings saved!`);
 
@@ -140,15 +159,11 @@ const Header = ({ onMaxFlightTimeChange }) => {
     setRosSettings(newRosSettings);
     setUnsavedChanges({...unsavedChanges, ros:true})
     
-    // Immediately save to localStorage to persist the connection state
-    const updatedSettings = {
-      rosSettings: newRosSettings,
-      timeSettings,
-      videoSettings,
-      globalConnectionStatus,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    
+    // Persist connection state to zustand store
+    useStore.getState().setRosSettings(newRosSettings);
+  // Also persist to localStorage
+  persistSettingsToLocal();
     
     toast.success(newConnectedState ? 'Connected to ROS2!' : 'Disconnected from ROS2!');
   };
@@ -162,15 +177,10 @@ const Header = ({ onMaxFlightTimeChange }) => {
     setRosSettings(newRosSettings);
     setUnsavedChanges({...unsavedChanges, ros:true})
     
-    // Immediately save to localStorage to persist the connection state
-    const updatedSettings = {
-      rosSettings: newRosSettings,
-      timeSettings,
-      videoSettings,
-      globalConnectionStatus,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    // Persist updated drone connection state to zustand store
+    useStore.getState().setRosSettings(newRosSettings);
+  // Also persist to localStorage
+  persistSettingsToLocal();
     
     const drone = rosSettings.drones.find(d => d.id === id);
     toast.success(`${drone.name} ${!drone.connected ? 'Connected' : 'Disconnected'}!`);
@@ -181,15 +191,10 @@ const Header = ({ onMaxFlightTimeChange }) => {
     setRosSettings(newRosSettings);
     setUnsavedChanges({...unsavedChanges, ros:true})
     
-    // Immediately save to localStorage to persist the changes
-    const updatedSettings = {
-      rosSettings: newRosSettings,
-      timeSettings,
-      videoSettings,
-      globalConnectionStatus,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    // Persist ros input changes to zustand store
+    useStore.getState().setRosSettings(newRosSettings);
+  // Also persist to localStorage
+  persistSettingsToLocal();
   };
 
   // Time inputs
@@ -198,15 +203,10 @@ const Header = ({ onMaxFlightTimeChange }) => {
     setTimeSettings(newTimeSettings);
     setUnsavedChanges({...unsavedChanges, time:true})
     
-    // Immediately save to localStorage to persist the changes
-    const updatedSettings = {
-      rosSettings,
-      timeSettings: newTimeSettings,
-      videoSettings,
-      globalConnectionStatus,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    // Persist updated time settings to zustand store
+    useStore.getState().setTimeSettings(newTimeSettings);
+  // Also persist to localStorage
+  persistSettingsToLocal();
     
     // Emit updated max flight time to parent if needed
     if (field === 'maxFlightTime' && onMaxFlightTimeChange) {
@@ -226,20 +226,24 @@ const Header = ({ onMaxFlightTimeChange }) => {
     setVideoSettings(newVideoSettings);
     setUnsavedChanges({...unsavedChanges, video:true})
     
-    // Immediately save to localStorage to persist the changes
-    const updatedSettings = {
-      rosSettings,
-      timeSettings,
-      videoSettings: newVideoSettings,
-      globalConnectionStatus,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    // Persist updated video settings to zustand store
+    useStore.getState().setVideoSettings(newVideoSettings);
+  // Also persist to localStorage
+  persistSettingsToLocal();
   };
 
   const handleGlobalConnect = () => {
+
+    if (globalConnectionStatus) {
+      // Disconnect logic
+      mockDataService.disconnectRos();
+      setGlobalConnectionStatus(!globalConnectionStatus);
+    } else {
+      mockDataService.connectRos(rosSettings.host, rosSettings.port);
+      setGlobalConnectionStatus(!globalConnectionStatus);
+    }
     const newStatus = !globalConnectionStatus;
-    setGlobalConnectionStatus(newStatus);
+  
     
     // Update connection status for ROS and saved video drones
     const updatedRosSettings = { ...rosSettings, connected: newStatus };
@@ -252,17 +256,12 @@ const Header = ({ onMaxFlightTimeChange }) => {
     setRosSettings(updatedRosSettings);
     setVideoSettings(updatedVideoSettings);
     
-    // Save to localStorage
-    localStorage.setItem(
-      'nidarSettings',
-      JSON.stringify({ 
-        rosSettings: updatedRosSettings, 
-        timeSettings, 
-        videoSettings: updatedVideoSettings, 
-        globalConnectionStatus: newStatus,
-        savedAt: new Date().toISOString() 
-      })
-    );
+    // Persist global connection status + derived settings to zustand store
+    useStore.getState().setRosSettings(updatedRosSettings);
+    useStore.getState().setVideoSettings(updatedVideoSettings);
+    useStore.getState().setGlobalConnectionStatus(newStatus);
+  // Also persist to localStorage
+  persistSettingsToLocal();
     
     toast.success(newStatus ? 'Connected to ROS server and drones!' : 'Disconnected from ROS server and drones!');
   };
@@ -272,15 +271,10 @@ const Header = ({ onMaxFlightTimeChange }) => {
     const resetTime = { maxFlightTime: 30, currentFlightTime: 0, isActive: false };
     setTimeSettings(resetTime);
     
-    // Immediately save to localStorage to persist the reset
-    const updatedSettings = {
-      rosSettings,
-      timeSettings: resetTime,
-      videoSettings,
-      globalConnectionStatus,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem('nidarSettings', JSON.stringify(updatedSettings));
+    // Persist reset time settings to zustand store
+    useStore.getState().setTimeSettings(resetTime);
+  // Also persist to localStorage
+  persistSettingsToLocal();
     
     // Emit updated max flight time to parent
     if (onMaxFlightTimeChange) {

@@ -142,7 +142,7 @@ const AlertsSection = ({ alerts, onClearAlerts, onMarkAllRead }) => {
       {/* Alert Summary */}
       {alerts.length > 0 && (
         <div className="mt-3 pt-3 border-t border-gray-700">
-          <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center  text-xs">
             <div className="flex space-x-4">
               <span className="text-red-400">
                 High: {alerts.filter(a => a.severity === 'HIGH').length}

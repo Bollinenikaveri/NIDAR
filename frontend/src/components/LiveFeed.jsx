@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Wifi, WifiOff } from "lucide-react";
+import useStore from "@/store/store";
 
 export default function LiveFeed() {
   const videoRef = useRef(null);
   const readerRef = useRef(null);
   const retryRef = useRef(null);
+
+  const [url , setUrl] = useState(useStore.getState().videoStreamUrl);
 
   const [isConnected, setIsConnected] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
@@ -20,7 +23,7 @@ export default function LiveFeed() {
   const feed = {
     id: "scout",
     name: "Scout Drone",
-    url: "http://192.168.1.7:8889/mystream/whep",
+    url: `{${url}}/whep`,
     resolution: "1920x1080",
     fps: 30,
   };
@@ -129,19 +132,23 @@ export default function LiveFeed() {
             </div>
           </>
         )}
-
-        {/* Overlay: Connecting / Reconnecting */}
+         {/* Overlay: Connecting / Reconnecting */}
         {!isConnected && (
-          <div className="flex flex-col items-center text-gray-400">
+          <div className="">
+           <div className=" absolute left-0 top-0 flex flex-col items-center justify-center w-full h-full text-gray-400">
             <WifiOff className="w-8 h-8 mb-2" />
             <span className="text-sm">{reconnecting ? "Reconnecting..." : "Connecting..."}</span>
             <span className="text-xs">{message}</span>
             <div className="mt-2 w-16 h-1 bg-gray-700 rounded-full overflow-hidden">
               <div className="w-full h-full bg-orange-500 rounded-full animate-pulse" />
             </div>
+            </div>
           </div>
         )}
+
+       
       </div>
+      
     </div>
   );
 }

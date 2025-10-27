@@ -20,6 +20,7 @@ const MissionControlDashboard = () => {
   useEffect(() => {
     // Simulate real-time updates
     const interval = setInterval(() => {
+      
       setDroneData(mockDataService.getDroneData());
       setMissionData(mockDataService.getMissionData());
 
