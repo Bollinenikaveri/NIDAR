@@ -1,224 +1,316 @@
-import ROSLIB, { Ros} from "roslib";
-
-import { parseKmlPolygon } from '../lib/parse-utils';
-import  useStore from "../store/store.js";
-import { tr } from "date-fns/locale";
+import ROSLIB, { Ros } from "roslib";
+import useStore from "../store/store.js";
+import { use } from "react";
 
 class MockDataService {
+
   constructor() {
-    // Access store via getter so we always get latest state
+
     this.getStore = () => useStore.getState();
+    this.isConnected = useStore.getState().globalConnectionStatus ?? false;
 
-    // If user has older persisted settings in localStorage, migrate them into zustand store
-    try {
-      const saved = localStorage.getItem('nidarSettings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // migrate rosSettings, timeSettings, videoSettings, globalConnectionStatus if present
-        if (parsed.rosSettings && this.getStore().setRosSettings) {
-          useStore.getState().setRosSettings(parsed.rosSettings);
-        }
-        if (parsed.timeSettings && this.getStore().setTimeSettings) {
-          useStore.getState().setTimeSettings(parsed.timeSettings);
-        }
-        if (parsed.videoSettings && this.getStore().setVideoSettings) {
-          useStore.getState().setVideoSettings(parsed.videoSettings);
-        }
-        if (typeof parsed.globalConnectionStatus !== 'undefined' && this.getStore().setGlobalConnectionStatus) {
-          useStore.getState().setGlobalConnectionStatus(parsed.globalConnectionStatus);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to migrate settings from localStorage to store:', e);
-    }
-    this.baseLocation = { lat: 37.7749, lng: -122.4194 }; // San Francisco
-    this.victimLocation = { lat: 37.7849, lng: -122.4094 };
-    this.currentDroneLocation = { lat: 37.7749, lng: -122.4194 };
-    this.alertTypes = [
-      'Victim Detected',
-      'Kit Delivered',
-      'Low Battery Warning',
-      'Communication Lost',
-      'Weather Alert',
-      'Obstacle Detected',
-      'Mission Complete',
-      'GPS Signal Weak'
-    ];
-  }
-
-  connectRos() {
-        // Initialize ROS connection URL from store or default to localhost
-    const st = this.getStore();
-    this.url = st.rosUrl && st.rosUrl.host && st.rosUrl.port
-      ? `ws://${st.rosUrl.host}:${st.rosUrl.port}`
-      : 'ws://localhost:9090';
-        // Initialize ROS connection
-    this.ros = new Ros({
-      url: this.url
-    });
-    this.ros.on('connection', () => {
-      console.log('Connected to ROS');
-    });
-    this.ros.on('error', (error) => {
-      console.error('Error connecting to ROS:', error);
-    });
-    this.ros.on('close', () => {
-      console.log('Connection to ROS closed');
-      
-    });
-    
-    // // Intialize Base Station and Drone Locations
-    // this.baseStationLocation = new ROSLIB.Service({
-    //   ros: this.ros,
-    //   name: '/base_station/location',
-    //   serviceType: 'geographic_msgs/GeoPoint'
-    // }).callService();
-
-    // // Initialize Scout and Delivery Drone Home Locations
-    // this.scoutHomeLocation = new ROSLIB.Service({
-    //   ros: this.ros,
-    //   name: '/scout/home_location',
-    //   serviceType: 'geographic_msgs/GeoPoint'
-    // }).callService();
-
-    // this.deliveryHomeLocation = new ROSLIB.Service({
-    //   ros: this.ros,
-    //   name: '/delivery/home_location',  
-    //   serviceType: 'geographic_msgs/GeoPoint'
-    // }).callService();
-
-    // // Initialize Victim and Current Drone Locations
-    // this.victimLocation = new ROSLIB.Service({
-    //   ros: this.ros,  
-    //   name: '/victim/location',
-    //   serviceType: 'geographic_msgs/GeoPoint'
-    // }).callService();
-
-    // this.currentScoutDroneLocation = new ROSLIB.Service({
-    //   ros: this.ros,
-    //   name: '/scout/location',
-    //   serviceType: 'geographic_msgs/GeoPoint'
-    // }).callService();
-
-    // this.currentDeliveryDroneLocation = new ROSLIB.Service({
-    //   ros: this.ros,
-    //   name: '/current_delivery_drone/location',
-    //   serviceType: 'geographic_msgs/GeoPoint'
-    // }).callService();
- return true;
-  }
-   disconnectRos() {
-    if (this.ros) {
-      this.ros.close();
-      console.log('Disconnected from ROS');
-    }
-  }
-
-  getMissionData() {
-    const startTime = new Date() - (Math.random() * 3600000); // Random start time within last hour
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    
-    return {
-      id: 'MSN-2025-001',
-      status: 'Active',
-      elapsedTime: elapsed,
-      progress: Math.min(Math.floor(elapsed / 36), 100), // Progress based on elapsed time
-      victimsDetected: Math.floor(Math.random() * 3) + 1,
-      kitsDelivered: Math.floor(Math.random() * 2),
-      startTime: new Date(startTime)
+    // ================= TELEMETRY =================
+    this.scoutTelemetry = {
+      state: 'Standby',
+      battery: 0,
+      altitude: 0,
+      speed: 0,
+      heading: 0,
+      location: { lat: 0, lng: 0 }
     };
-  }
 
-  getDroneData() {
-
-    const noise = () => (Math.random() - 0.5) * 0.001; 
-
-   let data = {
-      scout: {
-        id: 'SCOUT-01',
-        location: {
-          lat: this.currentDroneLocation.lat + noise(),
-          lng: this.currentDroneLocation.lng + noise()
-        },
-        battery: Math.floor(Math.random() * 30) + 70,
-        altitude: Math.floor(Math.random() * 50) + 100,
-        speed: Math.floor(Math.random() * 20) + 15,
-        connected: Math.random() > 0.1,
-        heading: Math.floor(Math.random() * 360)
-      },
-      delivery: {
-        id: 'DELIVERY-01',
-        location: {
-          lat: this.baseLocation.lat + noise(),
-          lng: this.baseLocation.lng + noise()
-        },
-        battery: Math.floor(Math.random() * 40) + 60,
-        altitude: Math.floor(Math.random() * 30) + 80,
-        speed: Math.floor(Math.random() * 15) + 10,
-        connected: Math.random() > 0.05,
-        heading: Math.floor(Math.random() * 360),
-        payload: Math.random() > 0.5 ? 'Medical Kit' : 'Empty'
-      },
-      victim: this.victimLocation,
-      base: this.baseLocation,
-      activeDrones: 2,
-      avgBattery: Math.floor(Math.random() * 20) + 70,
-      totalDistance: Math.floor(Math.random() * 5) + 12,
-      eta: Math.floor(Math.random() * 10) + 5
+    this.deliveryTelemetry = {
+      location: { lat: 0, lng: 0 },
+      battery: 0,
+      altitude: 0,
+      speed: 0,
+      heading: 0
     };
-    return data;
+
+    // ================= MISSION STATE =================
+    this.missionStartTime = null;
+    this.missionStatus = "Standby";
+    this.victimsDetected = 0;
+    this.kitsDelivered = 0;
+
+    this.alerts = [];
+
+    this.baseLocation = { lat: 37.7749, lng: -122.4194 };
   }
 
-  getAlerts() {
-    const alerts = [];
-    for (let i = 0; i < 3; i++) {
-      alerts.push(this.generateAlert());
-    }
-    return alerts;
-  }
+  // ==========================================================
+  // ALERT SYSTEM
+  // ==========================================================
 
-  generateAlert(customMessage = null, customSeverity = null) {
-    const severities = ['HIGH', 'MEDIUM', 'LOW'];
-    const severity = customSeverity || severities[Math.floor(Math.random() * severities.length)];
-    const message = customMessage || this.alertTypes[Math.floor(Math.random() * this.alertTypes.length)];
-    
+
+
+generateAlert(message = "Mission Update", severity = "LOW") {
     return {
-      id: Math.random().toString(36).substr(2, 9),
-      message,
+      id: crypto.randomUUID(),
+      message,  
       severity,
       timestamp: new Date(),
       coordinates: {
-        lat: this.baseLocation.lat + (Math.random() - 0.5) * 0.02,
-        lng: this.baseLocation.lng + (Math.random() - 0.5) * 0.02
+        lat: this.scoutTelemetry.location?.lat ?? this.baseLocation.lat,
+        lng: this.scoutTelemetry.location?.lng ?? this.baseLocation.lng
       },
       read: false
     };
   }
 
-  // A* pathfinding simulation
-  calculatePath(start, end) {
-    const path = [];
-    const steps = 10;
+
+  generateRosAltert(rosAlert) {
+
+    try {
+
+      const parsed = typeof rosAlert === "string"
+        ? JSON.parse(rosAlert)
+        : rosAlert;
+
     
-    for (let i = 0; i <= steps; i++) {
-      const progress = i / steps;
-      const lat = start.lat + (end.lat - start.lat) * progress;
-      const lng = start.lng + (end.lng - start.lng) * progress;
+         switch (parsed.type) {
+
+        case "MISSION_STARTED":
+          this.missionStartTime = new Date();
+          this.missionStatus = "Active";
+          this.victimsDetected = 0;
+          this.kitsDelivered = 0;
+          break;
+
+        case "MISSION_REJECTED":
+          this.missionStatus = "Rejected";
+          break;
+
+        case "MISSION_COMPLETE":
+          this.missionStatus = "Completed";
+          break;
+
+        case "MISSION_RTL":
+          this.missionStatus = "Returning";
+          break;
+
+        case "OBSTACLE_DETECTED":
+          this.victimsDetected++;
+          break;
+
+        case "DELIVERY_COMPLETE":
+          this.kitsDelivered++;
+          break;
+
+        default:
+          break;
+      }
+       return {
+        id: crypto.randomUUID(),
+        message: parsed.message || "Mission Update",
+        severity: parsed.severity || "LOW",
+        timestamp: new Date(),
+        coordinates: {
+          lat: parsed.latitude ?? this.baseLocation.lat,
+          lng: parsed.longitude ?? this.baseLocation.lng
+        },
+        read: false
+      };
       
-      // Add some curve to make it look more realistic
-      const offset = Math.sin(progress * Math.PI) * 0.005;
-      path.push({
-        lat: lat + offset,
-        lng: lng + offset
-      });
+      
+
+     
+
+    } catch (e) {
+      console.error("Invalid ROS alert:", e);
+      return null;
     }
-    
-    return path;
   }
 
- async getKMLData(file) {
+  addAlert(alert) {
+    if (!alert) return;
+    this.alerts.unshift(alert);
+  }
+
+  getAlerts() {
+    const alerts = [...this.alerts];
+    this.alerts = [];
+    return alerts;
+  }
+
+  // ==========================================================
+  // ROS CONNECTION
+  // ==========================================================
+
+  connectRos() {
+
+    const st = this.getStore();
+    const url = st.rosUrl?.host && st.rosUrl?.port
+      ? `ws://${st.rosUrl.host}:${st.rosUrl.port}`
+      : 'ws://localhost:9090';
+
+    this.ros = new Ros({ url });
+
+    this.ros.on('connection', () => {
+      useStore.getState().setGlobalConnectionStatus(true);
+      console.log("Connected to ROS");
+      this.setupSubscribers();
+      this.setupAlertSubscriber();
+    });
+
+    this.ros.on('error', () => {
+      useStore.getState().setGlobalConnectionStatus(false);
+    });
+
+    this.ros.on('close', () => {
+      useStore.getState().setGlobalConnectionStatus(false);
+    });
+
+    return true;
+  }
+
+  disconnectRos() {
+    if (this.ros) this.ros.close();
+  }
+
+  // ==========================================================
+  // ALERT SUBSCRIBER
+  // ==========================================================
+
+  setupAlertSubscriber() {
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: '/mission/alerts',
+      messageType: 'std_msgs/String'
+    }).subscribe((msg) => {
+
+      const alert = this.generateRosAltert(msg.data);
+      this.addAlert(alert);
+    });
+  }
+
+  // ==========================================================
+  // TELEMETRY SUBSCRIBERS
+  // ==========================================================
+
+  setupSubscribers() {
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: '/scout_drone/state',
+      messageType: 'std_msgs/String'
+    }).subscribe((msg) => {
+      this.scoutTelemetry.state = msg.data;
+    });
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: '/scout_drone/battery',
+      messageType: 'std_msgs/Float32'
+    }).subscribe((msg) => {
+      this.scoutTelemetry.battery = Math.round(msg.data);
+    });
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: '/scout_drone/altitude',
+      messageType: 'std_msgs/Float32'
+    }).subscribe((msg) => {
+      this.scoutTelemetry.altitude = msg.data;
+    });
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: '/scout_drone/speed',
+      messageType: 'std_msgs/Float32'
+    }).subscribe((msg) => {
+      this.scoutTelemetry.speed = msg.data;
+    });
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: '/scout_drone/heading',
+      messageType: 'std_msgs/Float32'
+    }).subscribe((msg) => {
+      this.scoutTelemetry.heading = msg.data;
+    });
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: '/scout_drone/location',
+      messageType: 'sensor_msgs/NavSatFix'
+    }).subscribe((msg) => {
+      this.scoutTelemetry.location = {
+        lat: msg.latitude,
+        lng: msg.longitude
+      };
+    });
+  }
+
+  // ==========================================================
+  // DRONE DATA (STABLE STRUCTURE — NEVER UNDEFINED)
+  // ==========================================================
+
+  getDroneData() {
+
+    const isConnected = this.getStore().globalConnectionStatus ?? false;
+
+    return {
+      scout: {
+        id: 'SCOUT-01',
+        location: this.scoutTelemetry.location ?? this.baseLocation,
+        battery: this.scoutTelemetry.battery ?? 0,
+        altitude: Number(this.scoutTelemetry.altitude ?? 0).toFixed(1),
+        speed: Number(this.scoutTelemetry.speed ?? 0).toFixed(1),
+        connected: isConnected,
+        heading: Math.floor(this.scoutTelemetry.heading ?? 0)
+      },
+
+      delivery: {
+        id: 'DELIVERY-01',
+        location: this.deliveryTelemetry.location ?? this.baseLocation,
+        battery: this.deliveryTelemetry.battery ?? 0,
+        altitude: Number(this.deliveryTelemetry.altitude ?? 0).toFixed(1),
+        speed: Number(this.deliveryTelemetry.speed ?? 0).toFixed(1),
+        connected: isConnected,
+        heading: Math.floor(this.deliveryTelemetry.heading ?? 0),
+        payload: "Medical Kit"
+      }
+    };
+  }
+
+  // ==========================================================
+  // MISSION DATA
+  // ==========================================================
+
+  getMissionData() {
+
+    const now = new Date();
+
+    const elapsed = this.missionStartTime
+      ? Math.floor((now - this.missionStartTime) / 1000)
+      : 0;
+
+    let progress = 0;
+
+    if (this.missionStatus === "Active") progress = 40;
+    if (this.missionStatus === "Returning") progress = 85;
+    if (this.missionStatus === "Completed") progress = 100;
+
+    return {
+      id: "MSN-REAL-001",
+      status: this.missionStatus,
+      elapsedTime: elapsed,
+      progress,
+      victimsDetected: this.victimsDetected,
+      kitsDelivered: this.kitsDelivered,
+      startTime: this.missionStartTime
+    };
+  }
+
+ async getKMLData(file) { 
+    if (!this.isConnected) {
+      this.generateAlert("Cannot process KML: Not connected to ROS", "HIGH");
+      return false;
+    }
     if (!file) {
-      return Promise.resolve(this.getDefaultKMLData());
+      return Promise.resolve(this.generateAlert("No KML file provided", "HIGH"));
     }
     try {      // Parse KML file and extract coordinates
       const kmlData = await parseKmlPolygon(file);
@@ -283,29 +375,49 @@ class MockDataService {
 
     } catch (error) {
       console.error("Error processing KML or calling service:", error);
-      return this.getDefaultKMLData();
+      this.generateAlert("KML Processing Error", "HIGH");
     }
   }
 
-  getDefaultKMLData() {
-    return {
-      fileName: 'Default Search Area',
-      waypoints: [
-        { name: 'Point 1', lat: this.baseLocation.lat - 0.01, lng: this.baseLocation.lng - 0.01 },
-        { name: 'Point 2', lat: this.baseLocation.lat - 0.01, lng: this.baseLocation.lng + 0.01 },
-        { name: 'Point 3', lat: this.baseLocation.lat + 0.01, lng: this.baseLocation.lng + 0.01 },
-        { name: 'Point 4', lat: this.baseLocation.lat + 0.01, lng: this.baseLocation.lng - 0.01 }
-      ],
-      coordinates: [{
-        type: 'area',
-        area: [
-          { lat: this.baseLocation.lat - 0.01, lng: this.baseLocation.lng - 0.01 },
-          { lat: this.baseLocation.lat - 0.01, lng: this.baseLocation.lng + 0.01 },
-          { lat: this.baseLocation.lat + 0.01, lng: this.baseLocation.lng + 0.01 },
-          { lat: this.baseLocation.lat + 0.01, lng: this.baseLocation.lng - 0.01 }
-        ]
-      }]
-    };
+
+  // ==========================================================
+  // START MISSION
+  // ==========================================================
+
+  startMission() {
+
+    const waypoints = useStore.getState().missionPlan?.waypoints;
+
+    if (!waypoints || waypoints.length === 0) {
+      alert("No waypoints defined!");
+      return;
+    }
+
+    const missionService = new ROSLIB.Service({
+      ros: this.ros,
+      name: '/start_mission',
+      serviceType: 'mission_interfaces/StartMission'
+    });
+
+    const request = new ROSLIB.ServiceRequest({
+      waypoints: waypoints.map(wp => ({
+        latitude: parseFloat(wp.lat),
+        longitude: parseFloat(wp.lng),
+        altitude: parseFloat(wp.alt || 20.0)
+      }))
+    });
+
+    missionService.callService(
+      request,
+      (result) => {
+        if (!result.accepted) {
+          console.warn("Mission Rejected by backend");
+        }
+      },
+      (error) => {
+        console.error("Mission Service Error:", error);
+      }
+    );
   }
 }
 

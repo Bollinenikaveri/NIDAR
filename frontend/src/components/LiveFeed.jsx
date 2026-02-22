@@ -14,6 +14,8 @@ export default function LiveFeed() {
   const [message, setMessage] = useState("Connecting...");
   const [now, setNow] = useState(new Date());
 
+
+  
   // Update clock overlay every second
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
@@ -28,6 +30,7 @@ export default function LiveFeed() {
     fps: 30,
   };
 
+  
   // --- Optimized reconnect logic ---
   const reconnect = useCallback(() => {
     clearTimeout(retryRef.current);
@@ -35,6 +38,7 @@ export default function LiveFeed() {
     setMessage("Reconnecting...");
     retryRef.current = setTimeout(() => connectStream(), 1500); // faster retry
   }, []);
+
 
   // --- Main WebRTC connect logic ---
   const connectStream = useCallback(() => {
@@ -56,9 +60,9 @@ export default function LiveFeed() {
       const reader = new window.MediaMTXWebRTCReader({
         url: feed.url,
         onError: (err) => {
-          console.warn("Stream error:", err);
+          //console.warn("Stream error:", err);
           setIsConnected(false);
-          setMessage("Connection lost. Retrying...");
+          //setMessage("Connection lost. Retrying...");
           reconnect();
         },
         onTrack: (evt) => {
@@ -76,7 +80,7 @@ export default function LiveFeed() {
       reader.retryPause = 1000;
       readerRef.current = reader;
     } catch (err) {
-      console.error("Error connecting to stream:", err);
+      //console.error("Error connecting to stream:", err);
       setIsConnected(false);
       setMessage("Failed to connect. Retrying...");
       reconnect();

@@ -10,6 +10,7 @@ import { mockDataService } from '../services/mockDataService';
 const MissionControlDashboard = () => {
   const [missionData, setMissionData] = useState(mockDataService.getMissionData());
   const [droneData, setDroneData] = useState(mockDataService.getDroneData());
+
   const [alerts, setAlerts] = useState(mockDataService.getAlerts());
   const [selectedFeed, setSelectedFeed] = useState('scout');
   const [missionActive, setMissionActive] = useState(false);
@@ -24,10 +25,14 @@ const MissionControlDashboard = () => {
       setDroneData(mockDataService.getDroneData());
       setMissionData(mockDataService.getMissionData());
 
-      // Occasionally add new alerts
-      if (Math.random() > 0.8) {
-        setAlerts(prev => [mockDataService.generateAlert(), ...prev.slice(0, 4)]);
+      const newAlerts = mockDataService.getAlerts();
+      if (newAlerts.length > 0) {
+        setAlerts(prev => [...newAlerts, ...prev].slice(0, 10)); // Keep only latest 10 alerts
       }
+      else {
+        setAlerts(prev => prev.slice(0, 10)); // Just trim old alerts if no new ones
+      }
+      
     }, 3000);
 
     return () => clearInterval(interval);
@@ -62,9 +67,13 @@ const MissionControlDashboard = () => {
     if (file) {
       try {
         const parsedKML = await mockDataService.getKMLData(file);
+       if (parsedKML ) {
         setKmlData(parsedKML);
         setAlerts(prev => [mockDataService.generateAlert('KML File Loaded Successfully', 'MEDIUM'), ...prev.slice(0, 4)]);
-        console.log('Parsed KML data:', parsedKML);
+        console.log('Parsed KML data:', parsedKML);}
+        else{
+          setAlerts(prev => [mockDataService.generateAlert('KML File Loaded with Warnings', 'LOW'), ...prev.slice(0, 4)]);
+        }
       } catch (error) {
         console.error('Error parsing KML file:', error);
         setAlerts(prev => [mockDataService.generateAlert('KML File Parse Error', 'HIGH'), ...prev.slice(0, 4)]);

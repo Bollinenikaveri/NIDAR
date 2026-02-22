@@ -40,7 +40,9 @@ const AlertsSection = ({ alerts, onClearAlerts, onMarkAllRead }) => {
     });
   };
 
-  const formatCoordinates = (coordinates) => {
+  const formatCoordinates = (coordinates) => { 
+    if (!coordinates) return 'N/A';
+    
     return `${coordinates.lat.toFixed(4)}, ${coordinates.lng.toFixed(4)}`;
   };
 

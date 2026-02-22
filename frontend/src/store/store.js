@@ -27,6 +27,8 @@ const useStore = create(
             videoDeliveryStreamUrl: { host: 'localhost', port: 9000, path: '/delivery' },
             setVideoDeliveryStreamUrl: (url) => set({ videoDeliveryStreamUrl: url }),
 
+            missionData : { waypoints: [], noFlyZones: [], flightPaths: [] },
+
             // High-level persisted settings used by Header
             rosSettings: {
                 host: 'localhost',
@@ -50,7 +52,11 @@ const useStore = create(
             setTimeSettings: (ts) => set({ timeSettings: ts }),
 
             globalConnectionStatus: false,
-            setGlobalConnectionStatus: (val) => set({ globalConnectionStatus: val })
+            setGlobalConnectionStatus: (val) => set({ globalConnectionStatus: val }),
+
+
+            missionPlan: { waypoints: [], noFlyZones: [], flightPaths: [] },
+            setMissionPlan: (mp) => set({ missionPlan: mp })
         }),
         {
             name: 'nidarSettings', // localStorage key

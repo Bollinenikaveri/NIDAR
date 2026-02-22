@@ -608,7 +608,7 @@ const Header = ({ onMaxFlightTimeChange }) => {
   const defaultRosSettings = {
     host: useStore.getState().rosUrl.host || 'localhost',
     port: useStore.getState().rosUrl.port || '9090',
-    connected: false,
+    connected: useStore.getState().globalConnectionStatus ,
     deliveryDrones: [], // New structure
     globalTopics: []
   };

@@ -6,6 +6,9 @@ import {
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
+import { useStore } from 'zustand';
+import { mockDataService } from '@/services/mockDataService';
+
 
 const MissionControlCard = ({ 
   missionData, 
@@ -72,11 +75,13 @@ const MissionControlCard = ({
   // ✅ Mission Start/Stop
   const handleStartMission = () => {
     onStartMission();
+    mockDataService.startMission();
     setElapsedTime(0);
     setShowNotification(false);
     if (!timerRef.current) {
       timerRef.current = setInterval(() => setElapsedTime(prev => prev + 1), 1000);
     }
+    
   };
 
   const handleAbortMission = () => {
@@ -84,8 +89,11 @@ const MissionControlCard = ({
     clearInterval(timerRef.current);
     timerRef.current = null;
   };
+  const alertNotconnected= ()=>{
+     toast.error("Drone not connected");
+  }
 
-  // ✅ Show warning if exceeding max flight time
+  //  Show warning if exceeding max flight time
   useEffect(() => {
     const limitInSeconds = maxFlightTime * 60;
     if (elapsedTime >= limitInSeconds && missionActive && limitInSeconds > 0) {
@@ -94,7 +102,7 @@ const MissionControlCard = ({
     }
   }, [elapsedTime, maxFlightTime, missionActive]);
 
-  // ✅ Cleanup
+  // Cleanup
   useEffect(() => () => clearInterval(timerRef.current), []);
 
   return (
@@ -134,6 +142,7 @@ const MissionControlCard = ({
             onDragOver={handleDrag}
             onDrop={handleDrop}
             onClick={openFileDialog}
+          
           >
             <input
               ref={fileInputRef}
@@ -141,6 +150,7 @@ const MissionControlCard = ({
               accept=".kml"
               onChange={handleFileInput}
               className="hidden"
+              disabled={useStore.getGlobalConnectionStatus} // Disable if no connection or mission active
             />
             <div className="flex items-center justify-center h-full">
               {uploadStatus === 'uploading' ? (
