@@ -604,6 +604,7 @@ const Header = ({ onMaxFlightTimeChange }) => {
     reset: false,
   });
 
+ //console.log('Header component rendered with ROS settings:', useStore.getState().globalConnectionStatus);
   // Default state for ROS settings, now includes deliveryDrones
   const defaultRosSettings = {
     host: useStore.getState().rosUrl.host || 'localhost',
@@ -754,9 +755,15 @@ const Header = ({ onMaxFlightTimeChange }) => {
     const newRosSettings = { ...rosSettings, connected: newConnectedState };
     setRosSettings(newRosSettings);
     setUnsavedChanges({ ...unsavedChanges, ros: true })
+    
     useStore.getState().setRosSettings(newRosSettings);
     persistSettingsToLocal();
-    toast.success(newConnectedState ? 'Connected to ROS2!' : 'Disconnected from ROS2!');
+    if (newConnectedState) {
+      useStore.getState().setGlobalConnectionStatus(true);
+    } else {
+      useStore.getState().setGlobalConnectionStatus(false);
+    }
+    toast.success(newConnectedState ? 'Connected to ROS2!'  : 'Disconnected from ROS2!');
   };
 
   // *** REMOVED old handleDroneConnect ***

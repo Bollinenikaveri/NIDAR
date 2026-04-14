@@ -6,7 +6,7 @@ import {
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
-import { useStore } from 'zustand';
+import useStore from '@/store/store';
 import { mockDataService } from '@/services/mockDataService';
 
 
@@ -27,6 +27,7 @@ const MissionControlCard = ({
   const [elapsedTime, setElapsedTime] = useState(0);
   const timerRef = useRef(null);
   const [showNotification, setShowNotification] = useState(false);
+    const globalConnectionStatus = useStore((state) => state.globalConnectionStatus);
 
   const formatElapsedTime = (seconds) => {
     const hrs = Math.floor(seconds / 3600);
@@ -124,7 +125,11 @@ const MissionControlCard = ({
       <h3 className="text-lg font-semibold mb-4 text-blue-400">Mission Control</h3>
       
       <div className="space-y-4">
-        {/* KML Upload Section */}
+        {/* KML Upload Section
+                     */  }
+          
+
+        {globalConnectionStatus ? (
         <div className="bg-gray-800/50 rounded-lg p-3">
           <h4 className="text-sm font-semibold text-blue-400 mb-2">Mission Area (KML)</h4>
           <div
@@ -185,7 +190,12 @@ const MissionControlCard = ({
               )}
             </div>
           </div>
-        </div>
+        </div>) : (
+          <div className="bg-gray-800/50 rounded-lg p-3 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-red-400 mr-2" />
+            <span className="text-sm text-red-400">Connect to ROS to upload KML</span>
+          </div>
+        )}
 
         {/* Mission Info */}
         <div className="bg-gray-800/50 rounded-lg p-3">
@@ -212,13 +222,15 @@ const MissionControlCard = ({
               {missionActive ? "Active" : "Standby"}
             </Badge>
           </div>
+         {/*
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-400">Mission Progress</span>
               <span className="text-white">{missionData.progress}%</span>
             </div>
             <Progress value={missionData.progress} className="h-2" />
-          </div>
+          </div>*/
+         }
         </div>
 
         {/* Mission Stats */}

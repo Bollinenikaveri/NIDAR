@@ -68,7 +68,7 @@ const victimIcon = createCustomIcon(
 );
 const waypointIcon = createCustomIcon(
   '#06b6d4',
-  '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>'
+  '<circle cx="12" cy="12" r="1.5" />'
 );
 
 /* ---------- Map bounds updater ---------- */

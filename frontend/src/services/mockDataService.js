@@ -1,6 +1,7 @@
 import ROSLIB, { Ros } from "roslib";
 import useStore from "../store/store.js";
 import { use } from "react";
+import  {parseKmlPolygon}  from  "@/lib/parse-utils.js";
 
 class MockDataService {
 
@@ -8,6 +9,8 @@ class MockDataService {
 
     this.getStore = () => useStore.getState();
     this.isConnected = useStore.getState().globalConnectionStatus ?? false;
+    this.scoutName = useStore.getState().rosSettings?.drones?.find(d => d.id === 'scout')?.name || "scout";
+    this.deliveryName = useStore.getState().rosSettings?.drones?.find(d => d.id === 'delivery')?.name || "delivery";
 
     // ================= TELEMETRY =================
     this.scoutTelemetry = {
@@ -79,6 +82,7 @@ generateAlert(message = "Mission Update", severity = "LOW") {
 
         case "MISSION_REJECTED":
           this.missionStatus = "Rejected";
+          
           break;
 
         case "MISSION_COMPLETE":
@@ -112,9 +116,6 @@ generateAlert(message = "Mission Update", severity = "LOW") {
         read: false
       };
       
-      
-
-     
 
     } catch (e) {
       console.error("Invalid ROS alert:", e);
@@ -147,7 +148,9 @@ generateAlert(message = "Mission Update", severity = "LOW") {
     this.ros = new Ros({ url });
 
     this.ros.on('connection', () => {
-      useStore.getState().setGlobalConnectionStatus(true);
+      setInterval(() => {
+        useStore.getState().setGlobalConnectionStatus(true);
+      }, 3000);
       console.log("Connected to ROS");
       this.setupSubscribers();
       this.setupAlertSubscriber();
@@ -193,7 +196,7 @@ generateAlert(message = "Mission Update", severity = "LOW") {
 
     new ROSLIB.Topic({
       ros: this.ros,
-      name: '/scout_drone/state',
+      name: `/${this.scoutName}_drone/state`,
       messageType: 'std_msgs/String'
     }).subscribe((msg) => {
       this.scoutTelemetry.state = msg.data;
@@ -201,7 +204,7 @@ generateAlert(message = "Mission Update", severity = "LOW") {
 
     new ROSLIB.Topic({
       ros: this.ros,
-      name: '/scout_drone/battery',
+      name: `/${this.scoutName}_drone/battery`,
       messageType: 'std_msgs/Float32'
     }).subscribe((msg) => {
       this.scoutTelemetry.battery = Math.round(msg.data);
@@ -209,7 +212,7 @@ generateAlert(message = "Mission Update", severity = "LOW") {
 
     new ROSLIB.Topic({
       ros: this.ros,
-      name: '/scout_drone/altitude',
+      name: `/${this.scoutName}_drone/altitude`,
       messageType: 'std_msgs/Float32'
     }).subscribe((msg) => {
       this.scoutTelemetry.altitude = msg.data;
@@ -217,7 +220,7 @@ generateAlert(message = "Mission Update", severity = "LOW") {
 
     new ROSLIB.Topic({
       ros: this.ros,
-      name: '/scout_drone/speed',
+      name: `/${this.scoutName}_drone/speed`  ,
       messageType: 'std_msgs/Float32'
     }).subscribe((msg) => {
       this.scoutTelemetry.speed = msg.data;
@@ -225,15 +228,17 @@ generateAlert(message = "Mission Update", severity = "LOW") {
 
     new ROSLIB.Topic({
       ros: this.ros,
-      name: '/scout_drone/heading',
+      name: `/${this.scoutName}_drone/heading`,
       messageType: 'std_msgs/Float32'
     }).subscribe((msg) => {
       this.scoutTelemetry.heading = msg.data;
     });
 
+  
+
     new ROSLIB.Topic({
       ros: this.ros,
-      name: '/scout_drone/location',
+      name: `/${this.scoutName}_drone/location`,
       messageType: 'sensor_msgs/NavSatFix'
     }).subscribe((msg) => {
       this.scoutTelemetry.location = {
@@ -241,8 +246,61 @@ generateAlert(message = "Mission Update", severity = "LOW") {
         lng: msg.longitude
       };
     });
-  }
+  
+  new ROSLIB.Topic({
+      ros: this.ros,
+      name: `/${this.deliveryName}_drone/battery`,
+      messageType: 'std_msgs/Float32'
+    }).subscribe((msg) => {
+      this.deliveryTelemetry.battery = Math.round(msg.data);
+    });
 
+      new ROSLIB.Topic({
+      ros: this.ros,
+      name: `/${this.deliveryName}_drone/altitude`,
+      messageType: 'std_msgs/Float32'
+    }).subscribe((msg) => {
+      this.deliveryTelemetry.altitude = msg.data;
+    });
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: `/${this.deliveryName}_drone/speed`  ,
+      messageType: 'std_msgs/Float32'
+    }).subscribe((msg) => {
+      this.deliveryTelemetry.speed = msg.data;
+    });
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: `/${this.deliveryName}_drone/heading`,
+      messageType: 'std_msgs/Float32'
+    }).subscribe((msg) => {
+      this.deliveryTelemetry.heading = msg.data;
+    });
+    
+    
+    
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: `/${this.deliveryName}_drone/payload_status`,
+      messageType: 'std_msgs/String'
+    }).subscribe((msg) => {
+      this.deliveryTelemetry.payloadStatus = msg.data;
+    });
+
+
+    new ROSLIB.Topic({
+      ros: this.ros,
+      name: `/${this.deliveryName}_drone/location`,
+      messageType: 'sensor_msgs/NavSatFix'
+    }).subscribe((msg) => {
+      this.deliveryTelemetry.location = {
+        lat: msg.latitude,
+        lng: msg.longitude
+      };
+    });
+  }
   // ==========================================================
   // DRONE DATA (STABLE STRUCTURE — NEVER UNDEFINED)
   // ==========================================================
@@ -305,10 +363,8 @@ generateAlert(message = "Mission Update", severity = "LOW") {
   }
 
  async getKMLData(file) { 
-    if (!this.isConnected) {
-      this.generateAlert("Cannot process KML: Not connected to ROS", "HIGH");
-      return false;
-    }
+   
+   
     if (!file) {
       return Promise.resolve(this.generateAlert("No KML file provided", "HIGH"));
     }
@@ -339,8 +395,8 @@ generateAlert(message = "Mission Update", severity = "LOW") {
       const request = {
         polygon_x: kmlData.map(coord => coord.lng),
         polygon_y: kmlData.map(coord => coord.lat),
-        safe_margin: 1.0,
-        spacing: 1.0,
+        safe_margin: 3.0,
+        spacing: 6.0,
         angle: 0.0
       };
       console.log("Request to ROS service:", request);
@@ -348,7 +404,7 @@ generateAlert(message = "Mission Update", severity = "LOW") {
       // Create the ROS service client
       const pathService = new ROSLIB.Service({
         ros: this.ros,
-        name: '/get_lawnmower_path',
+        name: '/get_scout_path',
         serviceType: 'mission_interfaces/srv/GetLawnmowerPath'
       });
 
@@ -369,6 +425,11 @@ generateAlert(message = "Mission Update", severity = "LOW") {
         }));
 
         console.log("Waypoints (lat, lng):", waypoints);
+        useStore.getState().setMissionPlan({
+          waypoints,
+          noFlyZones: [],
+          flightPaths: []
+        });
       });
 
       return processedData;
@@ -389,7 +450,7 @@ generateAlert(message = "Mission Update", severity = "LOW") {
     const waypoints = useStore.getState().missionPlan?.waypoints;
 
     if (!waypoints || waypoints.length === 0) {
-      alert("No waypoints defined!");
+      alert("No waypoints defined!");  
       return;
     }
 
@@ -398,7 +459,7 @@ generateAlert(message = "Mission Update", severity = "LOW") {
       name: '/start_mission',
       serviceType: 'mission_interfaces/StartMission'
     });
-
+  
     const request = new ROSLIB.ServiceRequest({
       waypoints: waypoints.map(wp => ({
         latitude: parseFloat(wp.lat),
